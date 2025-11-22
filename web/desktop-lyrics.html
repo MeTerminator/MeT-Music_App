@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeT-Music 桌面歌词</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            box-sizing: border-box;
+            -webkit-user-drag: none;
+        }
+
+        :root {
+            --lyric-font-size: 36;
+            --trans-font-size: 18;
+            --main-color: #fff;
+            --shadow-color: rgba(0, 0, 0, 0.2);
+        }
+
+        body {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
+            padding: 12px;
+            cursor: pointer;
+            color: var(--main-color);
+            /* 限制 body 溢出，禁止窗口内容上下拉伸 */
+            overflow: hidden;
+            transition: opacity 0.3s;
+
+            /* 歌词窗口背景/拖拽层 */
+            &::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 16px;
+                background-color: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
+                z-index: 0;
+                opacity: 0;
+                cursor: move;
+                transition: opacity 0.3s;
+            }
+
+            &:hover {
+                &::after {
+                    opacity: 1;
+                }
+
+                /* 鼠标悬停时显示工具栏 */
+                header .tools {
+                    opacity: 1;
+                }
+            }
+
+            /* 锁定歌词状态 */
+            &.lock-lyric {
+                cursor: none;
+                pointer-events: none;
+
+                * {
+                    pointer-events: none;
+                }
+
+                &::after {
+                    opacity: 0;
+                }
+
+                &:hover {
+                    opacity: 0;
+                }
+            }
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            z-index: 2;
+
+            .tools {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0;
+                transition: opacity 0.3s;
+                gap: 4px;
+
+                .item {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 2px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    pointer-events: auto;
+                    transition:
+                        transform 0.3s,
+                        background-color 0.3s;
+
+                    &:hover {
+                        background-color: rgba(0, 0, 0, 0.4);
+                    }
+
+                    &:active {
+                        transform: scale(0.95);
+                    }
+
+                    svg {
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
+            }
+        }
+
+        main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            padding: 0 12px;
+            z-index: 1;
+            pointer-events: auto;
+            text-align: center;
+            overflow: hidden;
+            justify-content: center;
+        }
+
+        #lyric-text {
+            font-size: calc(var(--lyric-font-size) * 1px);
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            flex-wrap: wrap;
+            max-width: 100%;
+            line-height: 1.35;
+            flex-shrink: 1;
+        }
+
+        #lyric-tran {
+            font-size: calc(var(--trans-font-size) * 1px);
+            margin-top: 4px;
+            opacity: 0.6;
+            text-align: center;
+            max-width: 100%;
+            flex-wrap: wrap;
+            line-height: 1.3;
+            flex-shrink: 0;
+        }
+
+        .ktv-word {
+            display: inline-block;
+            transition: opacity 0.2s ease-out, color 0.2s ease-out;
+        }
+
+        .ktv-word[data-active="true"] {
+            color: var(--main-color, #fff);
+            text-shadow: 0 0 4px var(--shadow-color, rgba(255, 255, 255, 0.4));
+        }
+
+        .ktv-word[data-active="false"] {
+            color: var(--main-color, #fff);
+            text-shadow: none;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="tools" id="tools">
+            <div id="lock-lyric" class="item" title="锁定/解锁">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2M9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9zm9 14H6V10h12zm-6-3c1.1 0 2-.9 2-2s-.9-2-2-2s-2 .9-2 2s.9 2 2 2" />
+                </svg>
+            </div>
+            <div id="close-lyric" class="item" title="关闭">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M13.46 12L19 17.54V19h-1.46L12 13.46L6.46 19H5v-1.46L10.54 12L5 6.46V5h1.46L12 10.54L17.54 5H19v1.46z" />
+                </svg>
+            </div>
+        </div>
+    </header>
+    <main id="lyric-content">
+        <span id="lyric-text"></span>
+        <span id="lyric-tran"></span>
+    </main>
+
+    <script>
+        class LyricsWindow {
+            constructor() {
+                this.lyricTextDom = document.getElementById("lyric-text");
+                this.lyricTranDom = document.getElementById("lyric-tran");
+
+                this.isDragging = false;
+                this.startX = 0;
+                this.startY = 0;
+                this.startWinX = 0;
+                this.startWinY = 0;
+                this.winWidth = 0;
+                this.winHeight = 0;
+
+                this.menuClick();
+                this.setupIPCListeners();
+                this.setupWindowDragListeners();
+                this.initLockState();
+            }
+
+            calculateOpacity(percent) {
+                // percent: 0 到 1
+                // opacity: 0.35 到 1
+                const minOpacity = 0.35;
+                const maxOpacity = 1;
+                const opacityRange = maxOpacity - minOpacity;
+
+                return minOpacity + percent * opacityRange;
+            }
+
+            updateLyrics(lyricText = "", translation = "", lyricData = null) {
+                // 无歌词情况
+                if (!lyricData || lyricData.length === 0) {
+                    this.lyricTextDom.innerHTML = lyricText || "该歌曲暂无歌词";
+                    this.lyricTranDom.innerHTML = translation;
+                    this._lastLyricText = lyricText; // 更新缓存
+                    return;
+                }
+
+                const isNewLine = lyricText !== this._lastLyricText;
+                this._lastLyricText = lyricText;
+
+                if (isNewLine) {
+                    let html = "";
+
+                    for (let item of lyricData) {
+                        const lastChar = item.content?.slice(-1) || "";
+                        const extraPadding = lastChar === " " ? "padding-right:10px;" : "padding-right:0;";
+                        // 计算初始透明度，但由于是新行，percent通常为0，opacity为0.35
+                        const initialOpacity = this.calculateOpacity(item.percent);
+                        html += `<span  class="ktv-word" data-active="${item.percent > 0 ? 'true' : 'false'}" style="opacity: ${initialOpacity.toFixed(3)}; ${extraPadding}">${item.content}</span>`;
+                    }
+                    this.lyricTextDom.innerHTML = html;
+                    this._wordNodes = Array.from(this.lyricTextDom.querySelectorAll(".ktv-word"));
+                    this._lyricTextNode = this.lyricTextDom;
+                }
+
+                // 每帧更新时，计算并设置透明度
+                lyricData.forEach((item, idx) => {
+                    const node = this._wordNodes[idx];
+                    if (!node) return;
+
+                    const opacity = this.calculateOpacity(item.percent);
+
+                    // 设置透明度
+                    node.style.opacity = opacity.toFixed(3);
+
+                    // 保持 data-active 属性用于控制 active 样式
+                    if (item.percent > 0.01) {
+                        node.setAttribute("data-active", "true");
+                    } else {
+                        node.setAttribute("data-active", "false");
+                    }
+                });
+
+                // 翻译行每帧更新
+                this.lyricTranDom.innerHTML = translation;
+            }
+
+            // 初始化锁定状态
+            async initLockState() {
+                document.body.classList.toggle("lock-lyric", false);
+            }
+
+            menuClick() {
+                const toolsDom = document.getElementById("tools");
+                if (!toolsDom) return;
+                toolsDom.addEventListener("click", async (event) => {
+                    // 确保点击事件发生在可交互的按钮上
+                    const target = event.target.closest(".item");
+                    if (!target) return;
+                    const id = target.id;
+                    if (!id) return;
+
+                    switch (id) {
+                        case "close-lyric":
+                            // 通知主进程隐藏窗口
+                            window.electron.ipcRenderer.send("hide-desktop-lyric-window");
+                            break;
+                        case "lock-lyric":
+                            // 切换锁定状态，并通知主进程
+                            const newLockState = !document.body.classList.contains("lock-lyric");
+                            document.body.classList.toggle("lock-lyric", newLockState);
+                            window.electron.ipcRenderer.send("toggle-desktop-lyric-lock", newLockState);
+                            break;
+                    }
+                });
+            }
+
+            setupIPCListeners() {
+                // 更新歌曲信息
+                window.electron.ipcRenderer.on("play-song-change", (_, title) => {
+                    if (!title) return;
+                    const [songName, songArtist] = title.split(" - ");
+                    // console.log(`Now playing: ${songName} by ${songArtist}`);
+                });
+
+                // 更新歌词
+                window.electron.ipcRenderer.on("play-lyric-change", (_, data) => {
+                    if (!data) return;
+                    const { lyricText, lyricTrans, lyricData } = data;
+
+                    if (!lyricText || lyricText.length === 0) {
+                        this.updateLyrics("该歌曲暂无歌词", "", null);
+                        return;
+                    }
+
+                    this.updateLyrics(lyricText, lyricTrans || "", lyricData);
+                });
+
+                // 锁定状态变化
+                window.electron.ipcRenderer.on("toggle-desktop-lyric-lock-from-main", (_, lock) => {
+                    document.body.classList.toggle("lock-lyric", lock);
+                });
+            }
+
+            setupWindowDragListeners() {
+                document.addEventListener("mousedown", this.startDrag.bind(this));
+                document.addEventListener("mousemove", this.dragWindow.bind(this));
+                document.addEventListener("mouseup", this.endDrag.bind(this));
+            }
+
+            async startDrag(event) {
+                // 确保只有在非锁定状态下才能拖拽
+                if (document.body.classList.contains("lock-lyric")) return;
+
+                // 避免点击工具按钮时触发拖拽
+                if (event.target.closest(".item")) return;
+
+                this.isDragging = true;
+                const { screenX, screenY } = event;
+                const { x: winX, y: winY, width, height } = await window.electron.ipcRenderer.invoke("get-window-bounds");
+                this.startX = screenX;
+                this.startY = screenY;
+                this.startWinX = winX;
+                this.startWinY = winY;
+                this.winWidth = width;
+                this.winHeight = height;
+            }
+
+            async dragWindow(event) {
+                if (!this.isDragging) return;
+                const { screenX, screenY } = event;
+                let newWinX = this.startWinX + (screenX - this.startX);
+                let newWinY = this.startWinY + (screenY - this.startY);
+                const { width: screenWidth, height: screenHeight } = await window.electron.ipcRenderer.invoke("get-screen-size");
+
+                // 限制拖拽到屏幕边界内
+                // 此处有待商榷，考虑多显示器情况的出现
+                newWinX = Math.max(0, Math.min(screenWidth - this.winWidth, newWinX));
+                newWinY = Math.max(0, Math.min(screenHeight - this.winHeight, newWinY));
+
+                window.electron.ipcRenderer.send("move-window", newWinX, newWinY);
+            }
+
+            endDrag() {
+                this.isDragging = false;
+            }
+        }
+
+        new LyricsWindow();
+    </script>
+
+</body>
+
+</html>

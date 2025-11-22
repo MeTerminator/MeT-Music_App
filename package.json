@@ -1,0 +1,33 @@
+{
+    "name": "metmusic-app",
+    "version": "1.0.0",
+    "description": "MeT-Music_App",
+    "main": "src/index.js",
+    "scripts": {
+        "start": "electron-forge start",
+        "package": "electron-forge package",
+        "make": "electron-forge make",
+        "publish": "electron-forge publish"
+    },
+    "author": {
+        "name": "MeTerminator",
+        "url": "https://github.com/MeTerminator"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MeTerminator/MeT-Music_App.git"
+    },
+    "homepage": "https://met6.top/music/",
+    "license": "MIT",
+    "packageManager": "pnpm@10.22.0",
+    "devDependencies": {
+        "@electron-forge/cli": "^7.8.3",
+        "@electron-forge/maker-deb": "^7.10.2",
+        "@electron-forge/maker-dmg": "^7.10.2",
+        "@electron-forge/maker-rpm": "^7.10.2",
+        "@electron-forge/maker-squirrel": "^7.10.2",
+        "@electron-forge/maker-zip": "^7.10.2",
+        "@electron-forge/plugin-vite": "^7.10.2",
+        "electron": "^39.2.3"
+    }
+}
