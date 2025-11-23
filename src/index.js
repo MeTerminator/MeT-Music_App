@@ -8,6 +8,13 @@ let isQuiting = false;
 let lyricWindowVisible = false;
 let isShowTranslation = true;
 
+// 歌词窗口的默认/当前期望尺寸
+const DEFAULT_LYRIC_WIDTH = 1200;
+const DEFAULT_LYRIC_HEIGHT = 150; 
+let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
+let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
+let isResizing = false; // 用于标记是否是手动通过 resize-window 进行的尺寸调整
+
 // 当前播放歌曲信息
 let currentSong = {
     songName: '',
@@ -135,18 +142,20 @@ function createMainWindow() {
 function createLyricWindow() {
     if (lyricWindow) return;
 
-    const { width } = screen.getPrimaryDisplay().workAreaSize;
+    // 使用默认宽高初始化
+    currentLyricWidth = DEFAULT_LYRIC_WIDTH;
+    currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 
     lyricWindow = new BrowserWindow({
-        width: 1200,
-        height: 150,
+        width: currentLyricWidth,
+        height: currentLyricHeight,
         x: 100,
         y: 100,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
         skipTaskbar: true,
-        resizable: true,
+        resizable: false,
         show: false,
         maximizable: false,
         icon: path.join(__dirname, "..", "public", "icons", "icon.png"),
@@ -164,6 +173,18 @@ function createLyricWindow() {
     // 监听窗口显示/隐藏状态变化
     lyricWindow.on('hide', () => { lyricWindowVisible = false; updateTrayMenu(); });
     lyricWindow.on('show', () => { lyricWindowVisible = true; updateTrayMenu(); });
+
+    lyricWindow.on('resize', () => {
+        if (lyricWindow && !isResizing) {
+            const [actualWidth, actualHeight] = lyricWindow.getSize();
+            // 只有当实际尺寸与期望尺寸不一致时才进行恢复
+            if (actualWidth !== currentLyricWidth || actualHeight !== currentLyricHeight) {
+                 // 使用 setSize 而非 setBounds，只设置大小
+                lyricWindow.setSize(currentLyricWidth, currentLyricHeight);
+                // console.log(`窗口尺寸被意外修改，已恢复到 W:${currentLyricWidth} H:${currentLyricHeight}`);
+            }
+        }
+    });
 }
 
 // 创建系统托盘
@@ -279,13 +300,10 @@ ipcMain.handle('get-screen-size', () => {
     return { width, height };
 });
 ipcMain.handle('get-window-bounds', () => {
-    if (!lyricWindow) return { x: 0, y: 0, width: 400, height: 150 };
-    return lyricWindow.getBounds();
-});
-
-// IPC：拖动窗口
-ipcMain.on('move-window', (_event, x, y) => {
-    if (lyricWindow) lyricWindow.setBounds({ ...lyricWindow.getBounds(), x, y });
+    if (!lyricWindow) return { x: 0, y: 0, width: DEFAULT_LYRIC_WIDTH, height: DEFAULT_LYRIC_HEIGHT };
+    // 确保返回的bounds中使用当前期望的宽高，防止渲染进程获取到错误尺寸
+    const bounds = lyricWindow.getBounds();
+    return { ...bounds, width: currentLyricWidth, height: currentLyricHeight };
 });
 
 // IPC：锁定/解锁歌词窗口
@@ -330,7 +348,8 @@ ipcMain.on('send-main-event', (_event, action) => {
 ipcMain.on('move-window', (event, newX, newY) => {
     if (!lyricWindow) return;
 
-    const [currentWidth, currentHeight] = lyricWindow.getSize();
+    const currentWidth = currentLyricWidth;
+    const currentHeight = currentLyricHeight;
     
     // 获取当前光标位置
     const cursorPoint = screen.getCursorScreenPoint();
@@ -353,20 +372,33 @@ ipcMain.on('move-window', (event, newX, newY) => {
     // 限制下边界 (finalY + windowHeight 必须小于等于 display.bounds.y + display.bounds.height)
     finalY = Math.min(y + height - currentHeight, finalY);
 
-    // 3. 设置窗口新位置
+    // 3. 设置窗口新位置，同时指定宽高，避免拖动造成尺寸变化
     lyricWindow.setBounds({ x: finalX, y: finalY, width: currentWidth, height: currentHeight });
 });
 
 // 窗口拉伸/调整大小
 ipcMain.on('resize-window', (event, x, y, width, height) => {
     if (lyricWindow) {
+        // 标记为手动调整，防止 resize 监听器触发恢复逻辑
+        isResizing = true;
+        
+        // 更新期望的宽高
+        currentLyricWidth = Math.floor(width);
+        currentLyricHeight = Math.floor(height);
+
         // 设置新的位置和大小
         lyricWindow.setBounds({
             x: Math.floor(x),
             y: Math.floor(y),
-            width: Math.floor(width),
-            height: Math.floor(height)
+            width: currentLyricWidth,
+            height: currentLyricHeight // 使用更新后的宽高
         });
+
+        // 重置标记，允许 resize 监听器在下次非手动调整时工作
+        // 使用 setTimeout 确保 setBounds 执行完毕后才重置
+        setTimeout(() => {
+            isResizing = false;
+        }, 100);
     }
 });
 
