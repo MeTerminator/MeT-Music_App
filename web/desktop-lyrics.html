@@ -186,14 +186,10 @@
             }
 
             /* 锁定后隐藏拖拽层和拉伸把手 */
-            & .drag-area,
+            & .drag-area:hover,
             & .resize-handle {
                 opacity: 0 !important;
                 background-color: transparent !important;
-            }
-
-            &:hover {
-                opacity: 0;
             }
         }
 
@@ -244,6 +240,10 @@
 
         body:hover header .tools {
             opacity: 1;
+        }
+
+        body.lock-lyric:hover header .tools {
+            opacity: 0;
         }
 
         main {

@@ -5,12 +5,12 @@ let mainWindow = null;
 let lyricWindow = null;
 let tray = null;
 let isQuiting = false;
-let lyricWindowVisible = false;
+let lyricWindowVisible = true;
 let isShowTranslation = true;
 
 // 歌词窗口的默认/当前期望尺寸
 const DEFAULT_LYRIC_WIDTH = 1200;
-const DEFAULT_LYRIC_HEIGHT = 150; 
+const DEFAULT_LYRIC_HEIGHT = 150;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 let isResizing = false; // 用于标记是否是手动通过 resize-window 进行的尺寸调整
@@ -49,6 +49,13 @@ let currentSong = {
 let lyricConfig = {
     isLock: false
 };
+
+function getScreenWidth() {
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayMatching({ x: cursor.x, y: cursor.y, width: 1, height: 1 });
+    return display.bounds.width;
+}
+
 
 // 格式化时间
 function formatTime(seconds) {
@@ -143,20 +150,20 @@ function createLyricWindow() {
     if (lyricWindow) return;
 
     // 使用默认宽高初始化
-    currentLyricWidth = DEFAULT_LYRIC_WIDTH;
+    currentLyricWidth = getScreenWidth();
     currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 
     lyricWindow = new BrowserWindow({
         width: currentLyricWidth,
         height: currentLyricHeight,
-        x: 100,
-        y: 100,
+        x: 0,
+        y: 0,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
-        show: false,
+        show: true,
         maximizable: false,
         icon: path.join(__dirname, "..", "public", "icons", "icon.png"),
         webPreferences: {
@@ -179,19 +186,21 @@ function createLyricWindow() {
             const [actualWidth, actualHeight] = lyricWindow.getSize();
             // 只有当实际尺寸与期望尺寸不一致时才进行恢复
             if (actualWidth !== currentLyricWidth || actualHeight !== currentLyricHeight) {
-                 // 使用 setSize 而非 setBounds，只设置大小
+                // 使用 setSize 而非 setBounds，只设置大小
                 lyricWindow.setSize(currentLyricWidth, currentLyricHeight);
                 // console.log(`窗口尺寸被意外修改，已恢复到 W:${currentLyricWidth} H:${currentLyricHeight}`);
             }
         }
     });
+
+    toggleLyricLock();
 }
 
 // 创建系统托盘
 function createTray() {
     let trayIconPath = path.join(__dirname, "..", "public", "icons", "tray", "tray.png");
     let trayIcon = nativeImage.createFromPath(trayIconPath).resize({ width: 16, height: 16 });
-    
+
     tray = new Tray(trayIcon);
     updateTrayMenu();
 
@@ -200,6 +209,20 @@ function createTray() {
         mainWindow.show();
         mainWindow.focus();
     });
+}
+
+// 切换歌词锁定状态
+function toggleLyricLock() {
+    if (!lyricWindow) createLyricWindow();
+    const newLockState = !lyricConfig.isLock;
+    // 更新主进程状态
+    lyricConfig.isLock = newLockState;
+    // 更新窗口穿透设置
+    lyricWindow.setIgnoreMouseEvents(newLockState, { forward: true });
+    // 通知渲染进程切换样式
+    lyricWindow.webContents.send('toggle-desktop-lyric-lock-from-main', newLockState);
+    // 更新托盘菜单
+    updateTrayMenu();
 }
 
 // 更新托盘菜单
@@ -249,16 +272,7 @@ function updateTrayMenu() {
         type: 'checkbox',
         checked: lyricConfig.isLock,
         click: () => {
-            if (!lyricWindow) createLyricWindow();
-            const newLockState = !lyricConfig.isLock;
-            // 更新主进程状态
-            lyricConfig.isLock = newLockState;
-            // 更新窗口穿透设置
-            lyricWindow.setIgnoreMouseEvents(newLockState, { forward: true });
-            // 通知渲染进程切换样式
-            lyricWindow.webContents.send('toggle-desktop-lyric-lock-from-main', newLockState);
-            // 更新托盘菜单
-            updateTrayMenu();
+            toggleLyricLock();
         }
     });
 
@@ -271,7 +285,7 @@ function updateTrayMenu() {
 // IPC 通信：接收前端 Hook 数据
 ipcMain.on('metmusic-hook', (_event, data) => {
     if (isQuiting) return;
-    
+
     currentSong = { ...currentSong, ...data };
     updateTrayMenu();
 
@@ -280,10 +294,10 @@ ipcMain.on('metmusic-hook', (_event, data) => {
     // 更新桌面歌词窗口
     if (lyricWindow) {
         lyricWindow.webContents.send('play-song-change', `${data.songName} - ${data.songArtist}`);
-        lyricWindow.webContents.send('play-lyric-change', { 
+        lyricWindow.webContents.send('play-lyric-change', {
             lyricText: data.lyricText,
             lyricData: data.lyricData,
-            lyricTrans: isShowTranslation ? data.lyricTrans : '', 
+            lyricTrans: isShowTranslation ? data.lyricTrans : '',
         });
         lyricWindow.webContents.send('play-status-change', data.isPlaying);
     }
@@ -350,7 +364,7 @@ ipcMain.on('move-window', (event, newX, newY) => {
 
     const currentWidth = currentLyricWidth;
     const currentHeight = currentLyricHeight;
-    
+
     // 获取当前光标位置
     const cursorPoint = screen.getCursorScreenPoint();
     // 获取光标所在的显示器
@@ -361,7 +375,7 @@ ipcMain.on('move-window', (event, newX, newY) => {
     // 限制窗口在当前显示器内部移动
     let finalX = newX;
     let finalY = newY;
-    
+
     // 限制左边界 (finalX 必须大于等于 display.bounds.x)
     finalX = Math.max(x, finalX);
     // 限制上边界 (finalY 必须大于等于 display.bounds.y)
@@ -381,7 +395,7 @@ ipcMain.on('resize-window', (event, x, y, width, height) => {
     if (lyricWindow) {
         // 标记为手动调整，防止 resize 监听器触发恢复逻辑
         isResizing = true;
-        
+
         // 更新期望的宽高
         currentLyricWidth = Math.floor(width);
         currentLyricHeight = Math.floor(height);
