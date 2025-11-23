@@ -19,7 +19,7 @@
             --lyric-font-size: 36;
             --trans-font-size: 18;
             --main-color: #fff;
-            --shadow-color: rgba(0, 0, 0, 0.2);
+            --resize-border-width: 6px;
         }
 
         body {
@@ -30,67 +30,181 @@
             width: 100%;
             height: 100vh;
             padding: 12px;
-            cursor: pointer;
             color: var(--main-color);
-            /* 限制 body 溢出，禁止窗口内容上下拉伸 */
-            overflow: hidden;
+            overflow: visible;
+            scrollbar-width: none;
             transition: opacity 0.3s;
+        }
 
-            /* 歌词窗口背景/拖拽层 */
-            &::after {
-                content: "";
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                border-radius: 16px;
-                background-color: rgba(0, 0, 0, 0.8);
-                backdrop-filter: blur(10px);
-                z-index: 0;
-                opacity: 0;
-                cursor: move;
-                transition: opacity 0.3s;
+        /* ---------------------------------------------------- */
+        /* 1. 窗口拖拽层 (用于移动窗口) */
+        /* ---------------------------------------------------- */
+        body .drag-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 16px;
+            /* 歌词主体可以拖动：背景透明 */
+            background-color: transparent;
+            backdrop-filter: blur(0);
+            z-index: 0;
+            opacity: 1;
+            /* 默认移动光标 */
+            cursor: grab;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            /* 歌词内容区禁止拖拽 */
+            &~header,
+            &~main {
+                -webkit-app-region: no-drag;
+            }
+        }
+
+        /* 鼠标悬停时给一个视觉提示 */
+        body:hover .drag-area {
+            background-color: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            cursor: grab;
+        }
+
+        /* 正在拖动时 */
+        body.is-dragging .drag-area {
+            cursor: grabbing;
+        }
+
+        /* ---------------------------------------------------- */
+        /* 2. 边框/拉伸把手 (用于拉伸窗口) */
+        /* ---------------------------------------------------- */
+
+        .resize-handle {
+            position: absolute;
+            z-index: 10;
+            /* 确保在拖拽层之上 */
+            /* 默认隐藏，鼠标悬停时显示 */
+            background-color: transparent;
+            border: 1px solid transparent;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        /* 鼠标悬停 body 时显示边框 */
+        body:hover .resize-handle {
+            opacity: 1;
+        }
+
+        /* 四条边 - 突出边框 */
+        .resize-top,
+        .resize-bottom {
+            left: var(--resize-border-width);
+            right: var(--resize-border-width);
+            height: var(--resize-border-width);
+            border-top: 1px solid rgba(0, 0, 0, 0.8);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.8);
+        }
+
+        .resize-left,
+        .resize-right {
+            top: var(--resize-border-width);
+            bottom: var(--resize-border-width);
+            width: var(--resize-border-width);
+            border-left: 1px solid rgba(0, 0, 0, 0.8);
+            border-right: 1px solid rgba(0, 0, 0, 0.8);
+        }
+
+        .resize-top {
+            top: 0;
+            cursor: n-resize;
+            border-bottom: none;
+        }
+
+        .resize-bottom {
+            bottom: 0;
+            cursor: s-resize;
+            border-top: none;
+        }
+
+        .resize-left {
+            left: 0;
+            cursor: w-resize;
+            border-right: none;
+        }
+
+        .resize-right {
+            right: 0;
+            cursor: e-resize;
+            border-left: none;
+        }
+
+        /* 四个角 - 绘制角点 */
+        .resize-top-left,
+        .resize-top-right,
+        .resize-bottom-left,
+        .resize-bottom-right {
+            width: var(--resize-border-width);
+            height: var(--resize-border-width);
+            z-index: 11;
+            border: 1px solid rgba(0, 0, 0, 0.8);
+        }
+
+        .resize-top-left {
+            top: 0;
+            left: 0;
+            cursor: nwse-resize;
+        }
+
+        .resize-top-right {
+            top: 0;
+            right: 0;
+            cursor: nesw-resize;
+        }
+
+        .resize-bottom-left {
+            bottom: 0;
+            left: 0;
+            cursor: nesw-resize;
+        }
+
+        .resize-bottom-right {
+            bottom: 0;
+            right: 0;
+            cursor: nwse-resize;
+        }
+
+
+        /* 锁定歌词状态 */
+        body.lock-lyric {
+            cursor: none;
+            pointer-events: none;
+
+            * {
+                pointer-events: none;
+            }
+
+            /* 锁定后隐藏拖拽层和拉伸把手 */
+            & .drag-area,
+            & .resize-handle {
+                opacity: 0 !important;
+                background-color: transparent !important;
             }
 
             &:hover {
-                &::after {
-                    opacity: 1;
-                }
-
-                /* 鼠标悬停时显示工具栏 */
-                header .tools {
-                    opacity: 1;
-                }
-            }
-
-            /* 锁定歌词状态 */
-            &.lock-lyric {
-                cursor: none;
-                pointer-events: none;
-
-                * {
-                    pointer-events: none;
-                }
-
-                &::after {
-                    opacity: 0;
-                }
-
-                &:hover {
-                    opacity: 0;
-                }
+                opacity: 0;
             }
         }
 
         header {
+            z-index: 20;
             display: flex;
             align-items: center;
             justify-content: flex-end;
             position: absolute;
             top: 4px;
             right: 4px;
-            z-index: 2;
 
             .tools {
                 display: flex;
@@ -126,6 +240,10 @@
                     }
                 }
             }
+        }
+
+        body:hover header .tools {
+            opacity: 1;
         }
 
         main {
@@ -173,7 +291,6 @@
 
         .ktv-word[data-active="true"] {
             color: var(--main-color, #fff);
-            text-shadow: 0 0 4px var(--shadow-color, rgba(255, 255, 255, 0.4));
         }
 
         .ktv-word[data-active="false"] {
@@ -200,17 +317,30 @@
             </div>
         </div>
     </header>
-    <main id="lyric-content">
-        <span id="lyric-text"></span>
-        <span id="lyric-tran"></span>
-    </main>
+
+    <div class="drag-area">
+        <main id="lyric-content">
+            <span id="lyric-text"></span>
+            <span id="lyric-tran"></span>
+        </main>
+    </div>
+
+    <div class="resize-handle resize-top" data-direction="top"></div>
+    <div class="resize-handle resize-bottom" data-direction="bottom"></div>
+    <div class="resize-handle resize-left" data-direction="left"></div>
+    <div class="resize-handle resize-right" data-direction="right"></div>
+    <div class="resize-handle resize-top-left" data-direction="top-left"></div>
+    <div class="resize-handle resize-top-right" data-direction="top-right"></div>
+    <div class="resize-handle resize-bottom-left" data-direction="bottom-left"></div>
+    <div class="resize-handle resize-bottom-right" data-direction="bottom-right"></div>
+
 
     <script>
         class LyricsWindow {
             constructor() {
                 this.lyricTextDom = document.getElementById("lyric-text");
                 this.lyricTranDom = document.getElementById("lyric-tran");
-
+                // 窗口移动拖拽状态
                 this.isDragging = false;
                 this.startX = 0;
                 this.startY = 0;
@@ -218,10 +348,23 @@
                 this.startWinY = 0;
                 this.winWidth = 0;
                 this.winHeight = 0;
+                // 窗口拉伸状态
+                this.isResizing = false;
+                this.resizeDirection = "";
 
                 this.menuClick();
                 this.setupIPCListeners();
-                this.setupWindowDragListeners();
+
+                // 窗口移动事件监听（从 drag-area 元素触发）
+                document.querySelector(".drag-area").addEventListener("mousedown", this.startDrag.bind(this));
+
+                // 窗口拉伸事件监听（从 resize-handle 元素触发）
+                this.setupWindowResizeListeners();
+
+                // 全局的 move/up 监听
+                document.addEventListener("mousemove", this.handleMove.bind(this));
+                document.addEventListener("mouseup", this.endInteraction.bind(this));
+
                 this.initLockState();
             }
 
@@ -341,11 +484,9 @@
                 });
             }
 
-            setupWindowDragListeners() {
-                document.addEventListener("mousedown", this.startDrag.bind(this));
-                document.addEventListener("mousemove", this.dragWindow.bind(this));
-                document.addEventListener("mouseup", this.endDrag.bind(this));
-            }
+            /* ---------------------------------------------------- */
+            /* 窗口移动逻辑 */
+            /* ---------------------------------------------------- */
 
             async startDrag(event) {
                 // 确保只有在非锁定状态下才能拖拽
@@ -355,8 +496,11 @@
                 if (event.target.closest(".item")) return;
 
                 this.isDragging = true;
+                document.body.classList.add("is-dragging"); // 添加类用于光标改变
+
                 const { screenX, screenY } = event;
                 const { x: winX, y: winY, width, height } = await window.electron.ipcRenderer.invoke("get-window-bounds");
+
                 this.startX = screenX;
                 this.startY = screenY;
                 this.startWinX = winX;
@@ -365,23 +509,124 @@
                 this.winHeight = height;
             }
 
-            async dragWindow(event) {
+            dragWindow(event) {
                 if (!this.isDragging) return;
                 const { screenX, screenY } = event;
-                let newWinX = this.startWinX + (screenX - this.startX);
-                let newWinY = this.startWinY + (screenY - this.startY);
-                const { width: screenWidth, height: screenHeight } = await window.electron.ipcRenderer.invoke("get-screen-size");
 
-                // 限制拖拽到屏幕边界内
-                // 此处有待商榷，考虑多显示器情况的出现
-                newWinX = Math.max(0, Math.min(screenWidth - this.winWidth, newWinX));
-                newWinY = Math.max(0, Math.min(screenHeight - this.winHeight, newWinY));
+                // 1. 计算偏移量
+                const deltaX = screenX - this.startX;
+                const deltaY = screenY - this.startY;
 
+                // 2. 计算新的绝对位置
+                let newWinX = this.startWinX + deltaX;
+                let newWinY = this.startWinY + deltaY;
+
+                // 3. 将新的绝对位置发送给主进程。
                 window.electron.ipcRenderer.send("move-window", newWinX, newWinY);
             }
 
-            endDrag() {
+            /* ---------------------------------------------------- */
+            /* 窗口拉伸逻辑 */
+            /* ---------------------------------------------------- */
+
+            setupWindowResizeListeners() {
+                document.querySelectorAll(".resize-handle").forEach(handle => {
+                    handle.addEventListener("mousedown", this.startResize.bind(this));
+                });
+            }
+
+            async startResize(event) {
+                // 确保只有在非锁定状态下才能拉伸
+                if (document.body.classList.contains("lock-lyric")) return;
+
+                // 阻止事件传播，避免同时触发拖拽
+                event.stopPropagation();
+
+                this.isResizing = true;
+                this.resizeDirection = event.currentTarget.dataset.direction;
+
+                const { screenX, screenY } = event;
+                const { x: winX, y: winY, width, height } = await window.electron.ipcRenderer.invoke("get-window-bounds");
+
+                this.startX = screenX;
+                this.startY = screenY;
+                this.startWinX = winX;
+                this.startWinY = winY;
+                this.winWidth = width;
+                this.winHeight = height;
+            }
+
+            resizeWindow(event) {
+                if (!this.isResizing) return;
+                const { screenX, screenY } = event;
+                const deltaX = screenX - this.startX;
+                const deltaY = screenY - this.startY;
+
+                let newWinX = this.startWinX;
+                let newWinY = this.startWinY;
+                let newWidth = this.winWidth;
+                let newHeight = this.winHeight;
+
+                const direction = this.resizeDirection;
+
+                // 计算Y轴 (上/下)
+                if (direction.includes("top")) {
+                    newWinY = this.startWinY + deltaY;
+                    newHeight = this.winHeight - deltaY;
+                } else if (direction.includes("bottom")) {
+                    newHeight = this.winHeight + deltaY;
+                }
+
+                // 计算X轴 (左/右)
+                if (direction.includes("left")) {
+                    newWinX = this.startWinX + deltaX;
+                    newWidth = this.winWidth - deltaX;
+                } else if (direction.includes("right")) {
+                    newWidth = this.winWidth + deltaX;
+                }
+
+                // 最小尺寸检查 (防止拉伸过小)
+                const minWidth = 100;
+                const minHeight = 50;
+
+                if (newWidth < minWidth) {
+                    // 如果从左边拉伸，需要修正 x 坐标以保持窗口右边缘不动
+                    if (direction.includes("left")) {
+                        newWinX = this.startWinX + (this.winWidth - minWidth);
+                    }
+                    newWidth = minWidth;
+                }
+
+                if (newHeight < minHeight) {
+                    // 如果从上边拉伸，需要修正 y 坐标以保持窗口下边缘不动
+                    if (direction.includes("top")) {
+                        newWinY = this.startWinY + (this.winHeight - minHeight);
+                    }
+                    newHeight = minHeight;
+                }
+
+
+                // 4. 将新的位置和大小发送给主进程。
+                window.electron.ipcRenderer.send("resize-window", Math.floor(newWinX), Math.floor(newWinY), Math.floor(newWidth), Math.floor(newHeight));
+            }
+
+            /* ---------------------------------------------------- */
+            /* 通用事件处理 */
+            /* ---------------------------------------------------- */
+
+            handleMove(event) {
+                if (this.isDragging) {
+                    this.dragWindow(event);
+                } else if (this.isResizing) {
+                    this.resizeWindow(event);
+                }
+            }
+
+            endInteraction() {
                 this.isDragging = false;
+                this.isResizing = false;
+                this.resizeDirection = "";
+                document.body.classList.remove("is-dragging");
             }
         }
 

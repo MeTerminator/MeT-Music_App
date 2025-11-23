@@ -138,10 +138,10 @@ function createLyricWindow() {
     const { width } = screen.getPrimaryDisplay().workAreaSize;
 
     lyricWindow = new BrowserWindow({
-        width: 800,
-        height: 100,
-        x: width - 620,
-        y: 50,
+        width: 1200,
+        height: 150,
+        x: 100,
+        y: 100,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -326,6 +326,49 @@ ipcMain.on('send-main-event', (_event, action) => {
     }
 });
 
+// IPC: 移动歌词窗口并限制在当前屏幕内
+ipcMain.on('move-window', (event, newX, newY) => {
+    if (!lyricWindow) return;
+
+    const [currentWidth, currentHeight] = lyricWindow.getSize();
+    
+    // 获取当前光标位置
+    const cursorPoint = screen.getCursorScreenPoint();
+    // 获取光标所在的显示器
+    const display = screen.getDisplayMatching({ x: cursorPoint.x, y: cursorPoint.y, width: 1, height: 1 });
+
+    const { x, y, width, height } = display.bounds;
+
+    // 限制窗口在当前显示器内部移动
+    let finalX = newX;
+    let finalY = newY;
+    
+    // 限制左边界 (finalX 必须大于等于 display.bounds.x)
+    finalX = Math.max(x, finalX);
+    // 限制上边界 (finalY 必须大于等于 display.bounds.y)
+    finalY = Math.max(y, finalY);
+
+    // 限制右边界 (finalX + windowWidth 必须小于等于 display.bounds.x + display.bounds.width)
+    finalX = Math.min(x + width - currentWidth, finalX);
+    // 限制下边界 (finalY + windowHeight 必须小于等于 display.bounds.y + display.bounds.height)
+    finalY = Math.min(y + height - currentHeight, finalY);
+
+    // 3. 设置窗口新位置
+    lyricWindow.setBounds({ x: finalX, y: finalY, width: currentWidth, height: currentHeight });
+});
+
+// 窗口拉伸/调整大小
+ipcMain.on('resize-window', (event, x, y, width, height) => {
+    if (lyricWindow) {
+        // 设置新的位置和大小
+        lyricWindow.setBounds({
+            x: Math.floor(x),
+            y: Math.floor(y),
+            width: Math.floor(width),
+            height: Math.floor(height)
+        });
+    }
+});
 
 // Electron 生命周期
 app.whenReady().then(() => {
