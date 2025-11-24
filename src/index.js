@@ -3,6 +3,13 @@ const path = require('path');
 
 if (require('electron-squirrel-startup')) app.quit();
 
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    // 如果获取锁失败，说明另一个实例已经在运行，直接退出当前实例。
+    app.quit();
+}
+
 let mainWindow = null;
 let lyricWindow = null;
 let tray = null;
@@ -415,6 +422,21 @@ ipcMain.on('resize-window', (event, x, y, width, height) => {
         setTimeout(() => {
             isResizing = false;
         }, 100);
+    }
+});
+
+// 监听第二个实例的启动
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // 当有人试图运行第二个实例时，Electron 会触发此事件。
+    // 此时，我们应该聚焦/显示已存在的第一个实例窗口。
+
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) {
+            // 如果主窗口被最小化，则恢复它
+            mainWindow.restore();
+        }
+        // 聚焦主窗口
+        mainWindow.focus();
     }
 });
 
