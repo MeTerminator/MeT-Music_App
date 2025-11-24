@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } = require('electron');
+const { updateElectronApp } = require('update-electron-app');
 const path = require('path');
 
 if (require('electron-squirrel-startup')) app.quit();
@@ -9,6 +10,9 @@ if (!gotTheLock) {
     // 如果获取锁失败，说明另一个实例已经在运行，直接退出当前实例。
     app.quit();
 }
+
+// 自动更新
+updateElectronApp();
 
 let mainWindow = null;
 let lyricWindow = null;
