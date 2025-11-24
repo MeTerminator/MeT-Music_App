@@ -435,11 +435,7 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
     // 此时，我们应该聚焦/显示已存在的第一个实例窗口。
 
     if (mainWindow) {
-        if (mainWindow.isMinimized()) {
-            // 如果主窗口被最小化，则恢复它
-            mainWindow.restore();
-        }
-        // 聚焦主窗口
+        mainWindow.show();
         mainWindow.focus();
     }
 });
