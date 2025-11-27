@@ -114,7 +114,7 @@ function createMainWindow() {
     mainWindow.webContents.on("did-finish-load", () => {
         const inject = `
     // === 注入 MeTMusic_Hook ===
-    window.MeTMusic_Hook = function(data) {
+    window.$MeTMusic_Hook = function(data) {
       window.electronAPI.sendHookData(data);
     };
 
@@ -238,6 +238,21 @@ function toggleLyricLock() {
     updateTrayMenu();
 }
 
+// 音乐控制：上一首
+function playPrev() {
+    if (mainWindow) mainWindow.webContents.executeJavaScript(`window.$MeTMusic_prev();`);
+}
+
+// 音乐控制：下一首
+function playNext() {
+    if (mainWindow) mainWindow.webContents.executeJavaScript(`window.$MeTMusic_next();`);
+}
+
+// 音乐控制：播放/暂停
+function playOrPause() {
+    if (mainWindow) mainWindow.webContents.executeJavaScript(`window.$MeTMusic_playOrPause();`);
+}
+
 // 更新托盘菜单
 function updateTrayMenu() {
     if (!tray || tray.isDestroyed()) return;
@@ -258,6 +273,29 @@ function updateTrayMenu() {
     if (currentSong.isPlaying && currentSong.lyricText) template.push({ label: `💬 歌词: ${currentSong.lyricText}` });
     if (currentSong.isPlaying && currentSong.lyricTrans) template.push({ label: `📄 翻译: ${currentSong.lyricTrans}` });
     if (currentSong.isPlaying && currentSong.lyricText || currentSong.lyricTrans) template.push({ type: 'separator' });
+
+    template.push({
+        label: '⏮ 上一首',
+        click: () => {
+            playPrev();
+        }
+    });
+
+    template.push({
+        label: currentSong.isPlaying ? '⏸ 暂停' : '▶ 播放',
+        click: () => {
+            playOrPause();
+        }
+    });
+
+    template.push({
+        label: '⏭ 下一首',
+        click: () => {
+            playNext();
+        }
+    });
+
+    template.push({ type: 'separator' });
 
     template.push({
         label: '显示桌面歌词',
@@ -357,18 +395,30 @@ ipcMain.handle('get-show-translation-state', () => {
     return isShowTranslation;
 });
 
+// IPC: 切换上一首
+ipcMain.on('play-prev', () => {
+    playPrev();
+});
+
+// IPC: 切换下一首
+ipcMain.on('play-next', () => {
+    playNext();
+});
+
+// IPC: 播放/暂停
+ipcMain.on('play-or-pause', () => {
+    playOrPause();
+});
+
+// IPC: 显示窗口
+ipcMain.on('show-window', () => {
+    if (mainWindow) mainWindow.show();
+});
+
 app.on("window-all-closed", () => { });
 app.on("before-quit", () => {
     isQuiting = true;
     tray?.destroy();
-});
-
-// 监听来自主窗口的快捷操作
-ipcMain.on('send-main-event', (_event, action) => {
-    // 仅转发播放控制命令到主窗口
-    if (mainWindow && ['play', 'pause', 'playPrev', 'playNext'].includes(action)) {
-        mainWindow.webContents.executeJavaScript(`window.MeTMusic_Control('${action}');`);
-    }
 });
 
 // IPC: 移动歌词窗口并限制在当前屏幕内
