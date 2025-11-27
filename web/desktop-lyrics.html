@@ -20,6 +20,8 @@
             --trans-font-size: 18;
             --main-color: #fff;
             --resize-border-width: 6px;
+            --color-active: #fff;
+            --color-inactive: rgba(255, 255, 255, 0.3);
         }
 
         body {
@@ -34,6 +36,7 @@
             overflow: visible;
             scrollbar-width: none;
             transition: opacity 0.3s;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         /* ---------------------------------------------------- */
@@ -282,20 +285,26 @@
             flex-wrap: wrap;
             line-height: 1.3;
             flex-shrink: 0;
+            color: var(--main-color);
         }
 
-        .ktv-word {
+        /* ---------------------------------------------------- */
+        /* KTV 歌词核心样式 */
+        /* ---------------------------------------------------- */
+
+        .ktv-line {
             display: inline-block;
-            transition: opacity 0.2s ease-out, color 0.2s ease-out;
-        }
-
-        .ktv-word[data-active="true"] {
-            color: var(--main-color, #fff);
-        }
-
-        .ktv-word[data-active="false"] {
-            color: var(--main-color, #fff);
-            text-shadow: none;
+            font-weight: bold;
+            background-image: linear-gradient(to right, var(--color-active) 50%, var(--color-inactive) 50%);
+            background-size: 200% 100%;
+            background-position-x: 100%;
+            background-repeat: no-repeat;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+            will-change: background-position-x;
+            white-space: pre-wrap;
         }
     </style>
 </head>
@@ -320,8 +329,8 @@
 
     <div class="drag-area">
         <main id="lyric-content">
-            <span id="lyric-text"></span>
-            <span id="lyric-tran"></span>
+            <div id="lyric-text"></div>
+            <div id="lyric-tran"></div>
         </main>
     </div>
 
@@ -368,64 +377,73 @@
                 this.initLockState();
             }
 
-            calculateOpacity(percent) {
-                // percent: 0 到 1
-                // opacity: 0.35 到 1
-                const minOpacity = 0.35;
-                const maxOpacity = 1;
-                const opacityRange = maxOpacity - minOpacity;
-
-                return minOpacity + percent * opacityRange;
-            }
-
             updateLyrics(lyricText = "", translation = "", lyricData = null) {
-                // 无歌词情况
+                const lineDom = this.lyricTextDom;
+
+                // 空歌词
                 if (!lyricData || lyricData.length === 0) {
-                    this.lyricTextDom.innerHTML = lyricText || "该歌曲暂无歌词";
-                    this.lyricTranDom.innerHTML = translation;
-                    this._lastLyricText = lyricText; // 更新缓存
+                    lineDom.textContent = lyricText;
+                    lineDom.className = "";
+                    this.lyricTranDom.textContent = translation;
                     return;
                 }
 
-                const isNewLine = lyricText !== this._lastLyricText;
-                this._lastLyricText = lyricText;
+                let percent = 0;
+                let isNewLine = false;
 
-                if (isNewLine) {
-                    let html = "";
-
-                    for (let item of lyricData) {
-                        const lastChar = item.content?.slice(-1) || "";
-                        const extraPadding = lastChar === " " ? "padding-right:10px;" : "padding-right:0;";
-                        // 计算初始透明度，但由于是新行，percent通常为0，opacity为0.35
-                        const initialOpacity = this.calculateOpacity(item.percent);
-                        html += `<span  class="ktv-word" data-active="${item.percent > 0 ? 'true' : 'false'}" style="opacity: ${initialOpacity.toFixed(3)}; ${extraPadding}">${item.content}</span>`;
-                    }
-                    this.lyricTextDom.innerHTML = html;
-                    this._wordNodes = Array.from(this.lyricTextDom.querySelectorAll(".ktv-word"));
-                    this._lyricTextNode = this.lyricTextDom;
+                if (lyricData && lyricData.length > 0) {
+                    let words = lyricData;
+                    let currentIndex = words.findIndex(w => w.percent < 1);
+                    if (currentIndex === -1) currentIndex = words.length;
+                    let wordPercent = (currentIndex < words.length ? words[currentIndex].percent : 1);
+                    percent = (currentIndex + wordPercent) / words.length;
                 }
 
-                // 每帧更新时，计算并设置透明度
-                lyricData.forEach((item, idx) => {
-                    const node = this._wordNodes[idx];
-                    if (!node) return;
+                // 限制范围
+                percent = Math.max(0, Math.min(1, percent));
+                if (percent <= 0) {
+                    isNewLine = true;
+                }
 
-                    const opacity = this.calculateOpacity(item.percent);
+                // 计算目标位置 (0% 是全亮，100% 是全暗)
+                const targetPos = Math.max(0, (1 - percent) * 100).toFixed(2) + "%";
+                if (isNewLine) {
+                    // 彻底禁用动画
+                    lineDom.style.transition = "none";
 
-                    // 设置透明度
-                    node.style.opacity = opacity.toFixed(3);
+                    // 更新歌词内容和设置初始位置 (100% 全暗)
+                    lineDom.innerHTML = lyricText;
+                    lineDom.className = "ktv-line";
 
-                    // 保持 data-active 属性用于控制 active 样式
-                    if (item.percent > 0.01) {
-                        node.setAttribute("data-active", "true");
-                    } else {
-                        node.setAttribute("data-active", "false");
-                    }
-                });
+                    // 确保新行开始时，背景位置是 100%（全暗），为下一步的无动画更新做准备
+                    lineDom.style.backgroundPositionX = `100%`;
 
-                // 翻译行每帧更新
+                    void lineDom.offsetHeight; // 读取 offsetHeight 来强制回流
+                }
+
+                // --- 设置整行遮罩进度 ---
+
+                // 恢复动画
+                if (!isNewLine) {
+                    lineDom.style.transition = "background-position-x 0.25s linear";
+                }
+
+                // 设置目标位置
+                lineDom.style.backgroundPositionX = targetPos;
+
+                // 为新行在下一帧启用动画
+                // 如果是新行，必须在当前帧的位置更新完成后，在下一帧恢复动画，否则后续进度不会动。
+                if (isNewLine) {
+                    setTimeout(() => {
+                        lineDom.style.transition = "background-position-x 0.25s linear";
+                    }, 0);
+                }
+
+                // 更新歌词和翻译
+                lineDom.textContent = lyricText;
                 this.lyricTranDom.innerHTML = translation;
             }
+
 
             // 初始化锁定状态
             async initLockState() {
