@@ -500,6 +500,17 @@
                 window.electron.ipcRenderer.on("toggle-desktop-lyric-lock-from-main", (_, lock) => {
                     document.body.classList.toggle("lock-lyric", lock);
                 });
+
+                // 是否播放
+                window.electron.ipcRenderer.on("play-status-change", (_, isPlaying) => {
+                    if (!isPlaying) {
+                        // 暂停时，body 变透明
+                        document.body.style.opacity = "0.3";
+                    } else {
+                        // 播放时，body 恢复不透明
+                        document.body.style.opacity = "1";
+                    }
+                });
             }
 
             /* ---------------------------------------------------- */
