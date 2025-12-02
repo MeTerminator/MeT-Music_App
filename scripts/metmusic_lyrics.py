@@ -178,6 +178,9 @@ class RealtimeLyricsPlayer:
                         except:
                             current_time_sec = 0.0
 
+                        # 用于抵消歌词延迟
+                        current_time_sec += 0.3
+
                         music_start_ts = system_time - \
                             int(current_time_sec * 1000)
                         await self._update_music_status(new_status, new_mid, music_start_ts)
