@@ -333,7 +333,7 @@
                     </svg>
                 </div>
             </div>
-            
+
             <div class="item-section">
                 <div id="play-prev" class="item" title="上一首">
                     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
@@ -433,6 +433,8 @@
             updateLyrics(lyricText = "", translation = "", lyricData = null) {
                 const lineDom = this.lyricTextDom;
 
+                // console.log("updateLyrics", lyricText, translation, lyricData);
+
                 // 空歌词
                 if (!lyricData || lyricData.length === 0) {
                     lineDom.textContent = lyricText;
@@ -441,15 +443,29 @@
                     return;
                 }
 
+                let lineHtml = "";
+                for (let i = 0; i < lyricData.length; i++) {
+                    const { content } = lyricData[i];
+                    lineHtml += `<span data-item="${i}" class="ktv-word">${content}</span>`;
+                }
+
                 let percent = 0;
                 let isNewLine = false;
 
                 if (lyricData && lyricData.length > 0) {
-                    let words = lyricData;
-                    let currentIndex = words.findIndex(w => w.percent < 1);
-                    if (currentIndex === -1) currentIndex = words.length;
-                    let wordPercent = (currentIndex < words.length ? words[currentIndex].percent : 1);
-                    percent = (currentIndex + wordPercent) / words.length;
+                    // 获取 lyric-text 元素的宽度
+                    let lineWidth = lineDom.offsetWidth;
+                    // 获取每个 span 元素的宽度
+                    let spans = lineDom.querySelectorAll(".ktv-word");
+                    if (spans.length !== lyricData.length) percent = 0;
+                    else {
+                        // 计算歌词宽度占比
+                        let spanWidths = Array.from(spans).map(span => span.offsetWidth);
+                        let spanWidthsPercent = spanWidths.map(width => width / lineWidth);
+                        for (let i = 0; i < spanWidthsPercent.length; i++) {
+                            percent += spanWidthsPercent[i] * lyricData[i].percent;
+                        }
+                    }
                 }
 
                 // 限制范围
@@ -465,7 +481,7 @@
                     lineDom.style.transition = "none";
 
                     // 更新歌词内容和设置初始位置 (100% 全暗)
-                    lineDom.innerHTML = lyricText;
+                    lineDom.innerHTML = lineHtml;
                     lineDom.className = "ktv-line";
 
                     // 确保新行开始时，背景位置是 100%（全暗），为下一步的无动画更新做准备
@@ -493,7 +509,7 @@
                 }
 
                 // 更新歌词和翻译
-                lineDom.textContent = lyricText;
+                if (lineDom.innerHTML !== lineHtml) lineDom.innerHTML = lineHtml;
                 this.lyricTranDom.innerHTML = translation;
             }
 
