@@ -23,7 +23,7 @@ let isShowTranslation = true;
 
 // 歌词窗口的默认/当前期望尺寸
 const DEFAULT_LYRIC_WIDTH = 1200;
-const DEFAULT_LYRIC_HEIGHT = 150;
+const DEFAULT_LYRIC_HEIGHT = 130;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 let isResizing = false; // 用于标记是否是手动通过 resize-window 进行的尺寸调整
@@ -80,10 +80,13 @@ function formatTime(seconds) {
 // 创建主窗口
 function createMainWindow() {
     if (mainWindow) return;
+    let screenWidth = getScreenWidth();
 
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
+        x: (screenWidth - 1200) / 2,
+        y: 80,
         show: true,
         frame: false,
         title: "MeT-Music",
@@ -205,8 +208,6 @@ function createLyricWindow() {
             }
         }
     });
-
-    toggleLyricLock();
 }
 
 // 创建系统托盘
@@ -495,4 +496,5 @@ app.whenReady().then(() => {
     createMainWindow();
     createLyricWindow();
     createTray();
+    toggleLyricLock();
 });

@@ -1,6 +1,7 @@
 class LyricsWindow {
     constructor() {
         this.lyricTextDom = document.getElementById("lyric-text");
+        this.lyricTextContainerDom = document.getElementById("lyric-text-container");
         this.lyricTranDom = document.getElementById("lyric-tran");
         // 窗口移动拖拽状态
         this.isDragging = false;
@@ -32,34 +33,35 @@ class LyricsWindow {
 
     updateLyrics(lyricText = "", translation = "", lyricData = null) {
         const lineDom = this.lyricTextDom;
+        const containerDom = this.lyricTextContainerDom;
 
-        // console.log("updateLyrics", lyricText, translation, lyricData);
-
-        // 空歌词
+        // 1. 处理空歌词或无数据情况
         if (!lyricData || lyricData.length === 0) {
             lineDom.textContent = lyricText;
             lineDom.className = "";
+            lineDom.style.transform = "translateX(0)";
             this.lyricTranDom.textContent = translation;
             return;
         }
 
+        // 2. 构建歌词 HTML
         let lineHtml = "";
         for (let i = 0; i < lyricData.length; i++) {
             const { content } = lyricData[i];
             lineHtml += `<span data-item="${i}" class="ktv-word">${content}</span>`;
         }
 
+        // 3. 计算当前进度百分比 (percent)
         let percent = 0;
         let isNewLine = false;
 
         if (lyricData && lyricData.length > 0) {
-            // 获取 lyric-text 元素的宽度
             let lineWidth = lineDom.offsetWidth;
-            // 获取每个 span 元素的宽度
+            // 防御性检查：如果宽度为0（例如刚启动），设为1避免除零
+            if (lineWidth === 0) lineWidth = 1;
+
             let spans = lineDom.querySelectorAll(".ktv-word");
-            if (spans.length !== lyricData.length) percent = 0;
-            else {
-                // 计算歌词宽度占比
+            if (spans.length === lyricData.length) {
                 let spanWidths = Array.from(spans).map(span => span.offsetWidth);
                 let spanWidthsPercent = spanWidths.map(width => width / lineWidth);
                 for (let i = 0; i < spanWidthsPercent.length; i++) {
@@ -68,48 +70,93 @@ class LyricsWindow {
             }
         }
 
-        // 限制范围
         percent = Math.max(0, Math.min(1, percent));
-        if (percent <= 0) {
+
+        // 4. 判断是否换行
+        if (lineDom.innerHTML !== lineHtml) {
             isNewLine = true;
         }
 
-        // 计算目标位置 (0% 是全亮，100% 是全暗)
-        const targetPos = Math.max(0, (1 - percent) * 100).toFixed(2) + "%";
+        // 5. 设置 KTV 染色进度 (Background Position)
+        // 注意：background-position 100% 代表全暗(0进度)，0% 代表全亮(100进度)
+        const targetBgPos = Math.max(0, (1 - percent) * 100).toFixed(2) + "%";
+
+        // ==========================================
+        // 基于进度的动态滚动计算
+        // ==========================================
+
+        // 只有换行或有进度时才计算，节省性能
+        const textWidth = lineDom.scrollWidth;
+        const containerWidth = containerDom.offsetWidth;
+
+        // 只有当文字宽度大于容器宽度时，才需要滚动
+        if (textWidth > containerWidth) {
+            // A. 计算原本 Flex 居中时的默认左边距 (相对于容器左侧，通常是负数)
+            // Flex Center 使得文本中心 = 容器中心
+            // 所以文本左边缘位置 = (容器宽 - 文本宽) / 2
+            const startLeft = (containerWidth - textWidth) / 2;
+
+            // B. 计算为了让"当前进度点"居中，文本需要向左移动的距离 (Offset)
+            // 目标：文本左边缘位置 + (文本宽 * percent) = 容器宽 / 2
+            // 也就是：文本左边缘位置 = 容器宽 / 2 - (文本宽 * percent)
+            // 我们通过 transform: translateX(delta) 来修正位置
+            // delta = 目标左边缘 - 初始Flex左边缘
+            // delta = [ContainerW/2 - TextW*p] - [(ContainerW - TextW)/2]
+            // 化简后: delta = TextW * (0.5 - p)
+            let translateX = textWidth * (0.5 - percent);
+
+            // C. 边界限制 (Clamping)
+            // 我们不希望文字滚得太远，导致左边或右边出现空白
+            // 左边界限制：不能把开头滚到屏幕中间右侧去。最大 translateX 使得左边缘对齐容器左边缘。
+            // 也就是 transform + startLeft <= 0 -> transform <= -startLeft
+            const maxTranslate = -startLeft; // 向右最大移动距离
+            const minTranslate = startLeft;  // 向左最大移动距离
+
+            // 应用限制
+            if (translateX > maxTranslate) translateX = maxTranslate;
+            if (translateX < minTranslate) translateX = minTranslate;
+
+            // 应用变换
+            if (isNewLine) {
+                // 换行瞬间取消动画，直接跳到新位置
+                lineDom.style.transition = "none";
+                lineDom.style.transform = `translateX(${translateX}px)`;
+            } else {
+                // 播放过程中恢复平滑过渡
+                // 注意：这里的时间要和 updateLyrics 的调用频率配合，通常 0.1s~0.2s 比较自然
+                lineDom.style.transition = "background-position-x 0.2s linear, transform 0.2s linear";
+                lineDom.style.transform = `translateX(${translateX}px)`;
+            }
+
+        } else {
+            // 没有溢出，复位
+            lineDom.style.transform = "translateX(0)";
+        }
+
+        // ==========================================
+
         if (isNewLine) {
-            // 彻底禁用动画
+            // 换行处理：先隐藏动画效果
             lineDom.style.transition = "none";
 
-            // 更新歌词内容和设置初始位置 (100% 全暗)
+            // 换行处理：重置内容和样式
             lineDom.innerHTML = lineHtml;
             lineDom.className = "ktv-line";
 
-            // 确保新行开始时，背景位置是 100%（全暗），为下一步的无动画更新做准备
+            // 初始染色状态：全暗
             lineDom.style.backgroundPositionX = `100%`;
 
-            void lineDom.offsetHeight; // 读取 offsetHeight 来强制回流
-        }
+            // 强制回流
+            void lineDom.offsetHeight;
 
-        // --- 设置整行遮罩进度 ---
-
-        // 恢复动画
-        if (!isNewLine) {
-            lineDom.style.transition = "background-position-x 0.25s linear";
-        }
-
-        // 设置目标位置
-        lineDom.style.backgroundPositionX = targetPos;
-
-        // 为新行在下一帧启用动画
-        // 如果是新行，必须在当前帧的位置更新完成后，在下一帧恢复动画，否则后续进度不会动。
-        if (isNewLine) {
+            // 下一帧恢复动画
             setTimeout(() => {
-                lineDom.style.transition = "background-position-x 0.25s linear";
-            }, 0);
+                lineDom.style.transition = "background-position-x 0.25s linear, transform 0.25s linear";
+            }, 20);
+        } else {
+            lineDom.style.backgroundPositionX = targetBgPos;
         }
 
-        // 更新歌词和翻译
-        if (lineDom.innerHTML !== lineHtml) lineDom.innerHTML = lineHtml;
         this.lyricTranDom.innerHTML = translation;
     }
 

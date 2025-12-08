@@ -256,17 +256,26 @@ main {
     justify-content: center;
 }
 
+#lyric-text-container {
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    /* 两侧遮罩渐隐 */
+    /* mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent); */
+    /* -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent); */
+}
+
 #lyric-text {
     font-size: calc(var(--lyric-font-size) * 1px);
     font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    flex-wrap: wrap;
-    max-width: 100%;
+    display: inline-block;
+    white-space: nowrap;
     line-height: 1.35;
-    flex-shrink: 1;
+    will-change: transform, background-position-x; /* 性能优化 */
+    
+    /* 确保位移和染色都使用线性过渡，时间保持一致 */
+    transition: background-position-x 0.25s linear, transform 0.25s linear;
 }
 
 #lyric-tran {
