@@ -208,6 +208,10 @@ function createLyricWindow() {
             }
         }
     });
+
+    lyricWindow.webContents.on("did-finish-load", () => {
+        toggleLyricLock();
+    });
 }
 
 // 创建系统托盘
@@ -496,5 +500,4 @@ app.whenReady().then(() => {
     createMainWindow();
     createLyricWindow();
     createTray();
-    toggleLyricLock();
 });

@@ -73,13 +73,13 @@ class LyricsWindow {
         percent = Math.max(0, Math.min(1, percent));
 
         // 4. 判断是否换行
-        if (lineDom.innerHTML !== lineHtml) {
+        if ((lineDom.innerHTML !== lineHtml) || percent <= 0) {
             isNewLine = true;
         }
 
         // 5. 设置 KTV 染色进度 (Background Position)
         // 注意：background-position 100% 代表全暗(0进度)，0% 代表全亮(100进度)
-        const targetBgPos = Math.max(0, (1 - percent) * 100).toFixed(2) + "%";
+        const targetBgPos = Math.max(0, (1 - percent) * 100).toFixed(2);
 
         // ==========================================
         // 基于进度的动态滚动计算
@@ -135,6 +135,12 @@ class LyricsWindow {
 
         // ==========================================
 
+        // 最后判断是否为新歌词行
+        // 进度倒退即视为新歌词行
+        if (parseFloat(lineDom.style.backgroundPositionX.replace("%", "")) < targetBgPos) {
+            isNewLine = true;
+        }
+
         if (isNewLine) {
             // 换行处理：先隐藏动画效果
             lineDom.style.transition = "none";
@@ -154,10 +160,11 @@ class LyricsWindow {
                 lineDom.style.transition = "background-position-x 0.25s linear, transform 0.25s linear";
             }, 20);
         } else {
-            lineDom.style.backgroundPositionX = targetBgPos;
+            lineDom.style.backgroundPositionX = targetBgPos + "%";
         }
-
-        this.lyricTranDom.innerHTML = translation;
+        if (this.lyricTranDom.textContent !== translation) {
+            this.lyricTranDom.innerHTML = translation;
+        }
     }
 
 
