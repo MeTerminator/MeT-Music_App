@@ -172,7 +172,7 @@ class LyricsWindow {
             const { lyricText, lyricTrans, lyricData } = data;
 
             if (!lyricText || lyricText.length === 0) {
-                this.updateLyrics("该歌曲暂无歌词", "", null);
+                this.updateLyrics("", "", null);
                 return;
             }
 
