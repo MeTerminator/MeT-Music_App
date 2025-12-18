@@ -5,16 +5,16 @@
 ## 图片预览
 
 * 全屏播放器 Full Screen Player
-<img src=".github/images/img1.png" alt="Full Screen Player" width="250px">
+<img src=".github/images/img1.png" alt="Full Screen Player" width="400px">
 
 * 播放列表页 Song List Page
-<img src=".github/images/img2.png" alt="Song List Page" width="250px">
+<img src=".github/images/img2.png" alt="Song List Page" width="400px">
 
 * 菜单 Menu
-<img src=".github/images/img3.png" alt="Menu" width="250px">
+<img src=".github/images/img3.png" alt="Menu" width="400px">
 
 * 桌面歌词 Desktop Lyrics
-<img src=".github/images/img4.png" alt="Desktop Lyrics" width="250px">
+<img src=".github/images/img4.png" alt="Desktop Lyrics" width="400px">
 
 ## 本地开发
 
