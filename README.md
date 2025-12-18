@@ -5,18 +5,16 @@
 ## 图片预览
 
 * 全屏播放器 Full Screen Player
-<img src=".github/images/img1.png" alt="Full Screen Player" width="100%">
+<img src=".github/images/img1.png" alt="Full Screen Player" width="250px">
 
 * 播放列表页 Song List Page
-<img src=".github/images/img2.png" alt="Song List Page" width="100%">
+<img src=".github/images/img2.png" alt="Song List Page" width="250px">
 
 * 菜单 Menu
-<img src=".github/images/img3.png" alt="Menu" width="100%">
+<img src=".github/images/img3.png" alt="Menu" width="250px">
 
 * 桌面歌词 Desktop Lyrics
-<img src=".github/images/img4.png" alt="Desktop Lyrics" width="100%">
-为了完善你的 `README.md`，我为你补充了**本地开发步骤**、**功能特性**、**打包指南**以及**技术栈**等核心板块。你可以根据项目的实际情况直接复制并微调。
-
+<img src=".github/images/img4.png" alt="Desktop Lyrics" width="250px">
 
 ## 本地开发
 
