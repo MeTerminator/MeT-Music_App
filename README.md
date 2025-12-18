@@ -56,7 +56,7 @@ npm run start
 
 * **Framework**: [Electron](https://www.electronjs.org/)
 * **Frontend**: [Vanilla.js](https://developer.mozilla.org/en-US/docs/Web/JavaScript) + [Vue.js](https://vuejs.org/)
-* **Build Tool**: [Vite](https://vitejs.dev/)
+* **Build Tool**: [Vite](https://vitejs.dev/) + [Electron Forge](https://www.electronforge.io/)
 
 ---
 
