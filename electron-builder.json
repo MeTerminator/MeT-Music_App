@@ -57,6 +57,7 @@
   },
   "linux": {
     "icon": "public/icons/icon.png",
+    "maintainer": "MeTerminator <meterminator666@gmail.com>",
     "target": [
       "deb",
       "rpm",
