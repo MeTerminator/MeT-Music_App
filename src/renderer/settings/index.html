@@ -26,13 +26,47 @@
                     <label>常规字体颜色</label>
                     <input type="color" v-model="config.textColor" @change="updateConfig">
                 </div>
+                <div class="setting-item">
+                    <label>常规字体不透明度 ({{ config.textOpacity }}%)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.textOpacity" min="0" max="100" @input="updateConfig">
+                    </div>
+                </div>
                 <div class="setting-item flex-row">
+                    <label>填充颜色使用歌曲主题色</label>
+                    <label class="switch">
+                        <input type="checkbox" v-model="config.useThemeColorForActive" @change="updateConfig">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item flex-row" v-if="!config.useThemeColorForActive">
                     <label>KTV 填充颜色</label>
                     <input type="color" v-model="config.colorActive" @change="updateConfig">
                 </div>
                 <div class="setting-item flex-row">
                     <label>KTV 底色颜色</label>
                     <input type="color" v-model="inactiveColorHex" @change="updateInactiveColor">
+                </div>
+                <div class="setting-item">
+                    <label>KTV 底色不透明度 ({{ inactiveOpacity }}%)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="inactiveOpacity" min="0" max="100" @input="updateInactiveColor">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Text Stroke -->
+            <section class="settings-section">
+                <h3>文字描边</h3>
+                <div class="setting-item">
+                    <label>描边粗细 ({{ config.strokeWidth }}px)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.strokeWidth" min="0" max="8" @input="updateConfig">
+                    </div>
+                </div>
+                <div class="setting-item flex-row">
+                    <label>描边颜色</label>
+                    <input type="color" v-model="config.strokeColor" @change="updateConfig">
                 </div>
             </section>
 
@@ -49,6 +83,18 @@
                         <input type="range" v-model.number="config.bgBlur" min="0" max="30" @input="updateConfig">
                     </div>
                 </div>
+                <div class="setting-item">
+                    <label>总体不透明度 ({{ config.overallOpacity }}%)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.overallOpacity" min="10" max="100" @input="updateConfig">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>暂停时不透明度 ({{ config.pausedOpacity }}%)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.pausedOpacity" min="0" max="100" @input="updateConfig">
+                    </div>
+                </div>
             </section>
 
             <!-- Switches -->
@@ -61,6 +107,12 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+                <div class="setting-item" v-if="config.showTranslation">
+                    <label>翻译字体大小比例 ({{ config.transFontSizeScale }}%)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.transFontSizeScale" min="15" max="50" @input="updateConfig">
+                    </div>
+                </div>
                 <div class="setting-item flex-row">
                     <label>锁定桌面歌词</label>
                     <label class="switch">
@@ -72,6 +124,7 @@
 
             <!-- Actions -->
             <div class="action-row">
+                <button class="btn btn-secondary" @click="resetLyricPosition">重置位置</button>
                 <button class="btn btn-secondary" @click="resetConfig">恢复默认</button>
             </div>
         </main>

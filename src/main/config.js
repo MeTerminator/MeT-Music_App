@@ -13,7 +13,18 @@ const DEFAULT_CONFIG = {
     showTranslation: true,
     isLock: false,
     bgColor: 'rgba(0, 0, 0, 0.2)',
-    bgBlur: 10
+    bgBlur: 10,
+    useThemeColorForActive: true,
+    textOpacity: 100,
+    strokeWidth: 1,
+    strokeColor: '#000000',
+    windowX: null,
+    windowY: null,
+    windowWidth: null,
+    windowHeight: null,
+    overallOpacity: 90,
+    transFontSizeScale: 23,
+    pausedOpacity: 30
 };
 
 let currentConfig = { ...DEFAULT_CONFIG };

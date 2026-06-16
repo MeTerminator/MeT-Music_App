@@ -148,14 +148,17 @@ function createLyricWindow() {
     if (lyricWindow) return lyricWindow;
 
     const currentConfig = config.getConfig();
-    currentLyricWidth = getScreenWidth();
-    currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
+    currentLyricWidth = currentConfig.windowWidth || getScreenWidth();
+    currentLyricHeight = currentConfig.windowHeight || DEFAULT_LYRIC_HEIGHT;
+    
+    const finalX = (currentConfig.windowX !== undefined && currentConfig.windowX !== null) ? currentConfig.windowX : 0;
+    const finalY = (currentConfig.windowY !== undefined && currentConfig.windowY !== null) ? currentConfig.windowY : 0;
 
     lyricWindow = new BrowserWindow({
         width: currentLyricWidth,
         height: currentLyricHeight,
-        x: 0,
-        y: 0,
+        x: finalX,
+        y: finalY,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -288,5 +291,6 @@ module.exports = {
     },
     setQuitting: (val) => { isQuiting = val; },
     moveLyricWindow,
-    resizeLyricWindow
+    resizeLyricWindow,
+    getScreenWidth
 };

@@ -127,6 +127,25 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
 
     template.push({ type: 'separator' });
     template.push({
+        label: '打开主界面',
+        click: () => {
+            const mainWindow = windowManager.getMainWindow();
+            if (!mainWindow) {
+                windowManager.createMainWindow();
+            } else {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        }
+    });
+    template.push({
+        label: '打开设置',
+        click: () => {
+            windowManager.createSettingsWindow();
+        }
+    });
+    template.push({ type: 'separator' });
+    template.push({
         label: '退出',
         click: () => {
             windowManager.setQuitting(true);

@@ -18,7 +18,36 @@ createApp({
             showTranslation: true,
             isLock: false,
             bgColor: 'rgba(0, 0, 0, 0.2)',
-            bgBlur: 10
+            bgBlur: 10,
+            useThemeColorForActive: true,
+            textOpacity: 100,
+            strokeWidth: 1,
+            strokeColor: '#000000',
+            overallOpacity: 90,
+            transFontSizeScale: 23,
+            pausedOpacity: 30
+        });
+
+        const hexToRgba = (hex, opacityPercent) => {
+            if (!hex) return 'rgba(255, 255, 255, 1)';
+            const cleanHex = hex.replace('#', '');
+            const r = parseInt(cleanHex.substring(0, 2), 16);
+            const g = parseInt(cleanHex.substring(2, 4), 16);
+            const b = parseInt(cleanHex.substring(4, 6), 16);
+            const alpha = (opacityPercent / 100).toFixed(2);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+
+        const coverTheme = ref(null);
+
+        const activeColor = computed(() => {
+            if (config.value.useThemeColorForActive) {
+                if (coverTheme.value?.light?.shadeTwo) {
+                    return `rgba(${coverTheme.value.light.shadeTwo}, 0.95)`;
+                }
+                return '#efefef95';
+            }
+            return config.value.colorActive;
         });
 
         // Elements
@@ -57,7 +86,8 @@ createApp({
 
         const computedTransFontSize = computed(() => {
             const H = mainContentHeight.value;
-            return Math.max(12, Math.floor(H * 0.28));
+            const scale = (config.value.transFontSizeScale !== undefined ? config.value.transFontSizeScale : 23) / 100;
+            return Math.max(12, Math.floor(H * scale));
         });
 
         // Imperatively apply styles and classes to #app element.
@@ -68,12 +98,17 @@ createApp({
             if (!appEl) return;
             appEl.style.setProperty('--lyric-font-size', computedFontSize.value + 'px');
             appEl.style.setProperty('--trans-font-size', computedTransFontSize.value + 'px');
-            appEl.style.setProperty('--main-color', config.value.textColor);
-            appEl.style.setProperty('--color-active', config.value.colorActive);
+            appEl.style.setProperty('--main-color', hexToRgba(config.value.textColor, config.value.textOpacity));
+            appEl.style.setProperty('--color-active', activeColor.value);
             appEl.style.setProperty('--color-inactive', config.value.colorInactive);
+            appEl.style.setProperty('--lyric-stroke-width', config.value.strokeWidth + 'px');
+            appEl.style.setProperty('--lyric-stroke-color', config.value.strokeColor);
             appEl.style.setProperty('--hover-bg-color', config.value.bgColor);
             appEl.style.setProperty('--hover-bg-blur', config.value.bgBlur + 'px');
-            appEl.style.opacity = isPlaying.value ? '1' : '0.3';
+            
+            const baseOpacity = isPlaying.value ? 1 : ((config.value.pausedOpacity !== undefined ? config.value.pausedOpacity : 30) / 100);
+            appEl.style.opacity = (baseOpacity * (config.value.overallOpacity || 100) / 100).toFixed(2);
+            
             appEl.classList.toggle('lock-lyric', config.value.isLock);
             appEl.classList.toggle('is-dragging', isDragging.value);
         });
@@ -191,10 +226,20 @@ createApp({
             }
         };
 
-        const endInteraction = () => {
-            isDragging.value = false;
-            isResizing.value = false;
-            resizeDirection = "";
+        const endInteraction = async () => {
+            if (isDragging.value || isResizing.value) {
+                isDragging.value = false;
+                isResizing.value = false;
+                resizeDirection = "";
+                
+                // Save lyric window bounds after drag/resize finishes
+                const bounds = await window.electron.ipcRenderer.invoke("get-window-bounds");
+                window.electron.ipcRenderer.send("save-lyric-window-bounds", bounds);
+            } else {
+                isDragging.value = false;
+                isResizing.value = false;
+                resizeDirection = "";
+            }
         };
 
         // KTV Calculation
@@ -265,6 +310,7 @@ createApp({
                 lyricText.value = data.lyricText || "";
                 lyricTrans.value = data.lyricTrans || "";
                 lyricData.value = data.lyricData || [];
+                coverTheme.value = data.coverTheme || null;
 
                 nextTick(() => {
                     updateKtvProgress();

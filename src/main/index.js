@@ -41,6 +41,7 @@ function setupIPC() {
                 lyricText: data.lyricText,
                 lyricData: data.lyricData,
                 lyricTrans: currentConfig.showTranslation ? data.lyricTrans : '',
+                coverTheme: data.coverTheme
             });
             lyricWindow.webContents.send('play-status-change', data.isPlaying);
         }
@@ -87,6 +88,33 @@ function setupIPC() {
 
     ipcMain.on('resize-window', (event, x, y, width, height) => {
         windowManager.resizeLyricWindow(x, y, width, height);
+    });
+
+    ipcMain.on('save-lyric-window-bounds', (_event, bounds) => {
+        const currentConfig = config.getConfig();
+        currentConfig.windowX = bounds.x;
+        currentConfig.windowY = bounds.y;
+        currentConfig.windowWidth = bounds.width;
+        currentConfig.windowHeight = bounds.height;
+        config.saveConfig(currentConfig);
+    });
+
+    ipcMain.on('reset-lyric-window-position', () => {
+        const screenWidth = windowManager.getScreenWidth();
+        const DEFAULT_HEIGHT = 130;
+        
+        const currentConfig = config.getConfig();
+        currentConfig.windowX = 0;
+        currentConfig.windowY = 0;
+        currentConfig.windowWidth = screenWidth;
+        currentConfig.windowHeight = DEFAULT_HEIGHT;
+        config.saveConfig(currentConfig);
+
+        const lyricWindow = windowManager.getLyricWindow();
+        if (lyricWindow) {
+            windowManager.resizeLyricWindow(0, 0, screenWidth, DEFAULT_HEIGHT);
+            windowManager.moveLyricWindow(0, 0);
+        }
     });
 
     ipcMain.handle('get-lyric-config', () => {
