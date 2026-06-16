@@ -57,11 +57,11 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            pnpm run dist:mac -- --publish never
+            pnpm run dist:mac --publish never
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            pnpm run dist:win -- --publish never
+            pnpm run dist:win --publish never
           else
-            pnpm run dist:linux -- --publish never
+            pnpm run dist:linux --publish never
           fi
         shell: bash
 
