@@ -1,0 +1,66 @@
+{
+  "appId": "top.met6.musicq",
+  "productName": "MeT-MusicQ",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/renderer/**/*",
+    "public/**/*",
+    "package.json"
+  ],
+  "mac": {
+    "icon": "public/icons/icon.icns",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
+    ]
+  },
+  "win": {
+    "icon": "public/icons/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64",
+          "ia32"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "ia32"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "linux": {
+    "icon": "public/icons/icon.png",
+    "target": [
+      "deb",
+      "rpm",
+      "AppImage"
+    ]
+  }
+}

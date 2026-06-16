@@ -8,8 +8,8 @@ contextBridge.exposeInMainWorld('electron', {
     }
 });
 
-// 提供 hook 数据接口给网页
 contextBridge.exposeInMainWorld('electronAPI', {
     sendHookData: (data) => ipcRenderer.send('metmusic-hook', data),
-    hideWindow: () => ipcRenderer.send('hide-window')
+    hideWindow: () => ipcRenderer.send('hide-window'),
+    openSettings: () => ipcRenderer.send('open-settings')
 });

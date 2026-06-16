@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>桌面歌词设置</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="app" class="settings-container">
+        <!-- Title Bar -->
+        <header class="title-bar">
+            <span class="title">桌面歌词设置</span>
+            <div class="close-btn" @click="closeSettings" title="关闭">×</div>
+        </header>
+
+        <!-- Main Form -->
+        <main class="settings-content">
+
+
+            <!-- Colors -->
+            <section class="settings-section">
+                <h3>歌词颜色</h3>
+                <div class="setting-item flex-row">
+                    <label>常规字体颜色</label>
+                    <input type="color" v-model="config.textColor" @change="updateConfig">
+                </div>
+                <div class="setting-item flex-row">
+                    <label>KTV 填充颜色</label>
+                    <input type="color" v-model="config.colorActive" @change="updateConfig">
+                </div>
+                <div class="setting-item flex-row">
+                    <label>KTV 底色颜色</label>
+                    <input type="color" v-model="inactiveColorHex" @change="updateInactiveColor">
+                </div>
+            </section>
+
+            <!-- Window Styles -->
+            <section class="settings-section">
+                <h3>背景与特效</h3>
+                <div class="setting-item flex-row">
+                    <label>悬停背景色</label>
+                    <input type="color" v-model="bgColorHex" @change="updateBgColor">
+                </div>
+                <div class="setting-item">
+                    <label>悬停模糊度 ({{ config.bgBlur }}px)</label>
+                    <div class="range-wrapper">
+                        <input type="range" v-model.number="config.bgBlur" min="0" max="30" @input="updateConfig">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Switches -->
+            <section class="settings-section">
+                <h3>其他选项</h3>
+                <div class="setting-item flex-row">
+                    <label>显示歌词翻译</label>
+                    <label class="switch">
+                        <input type="checkbox" v-model="config.showTranslation" @change="updateConfig">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item flex-row">
+                    <label>锁定桌面歌词</label>
+                    <label class="switch">
+                        <input type="checkbox" v-model="config.isLock" @change="updateConfig">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </section>
+
+            <!-- Actions -->
+            <div class="action-row">
+                <button class="btn btn-secondary" @click="resetConfig">恢复默认</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="../lib/vue.global.prod.js"></script>
+    <!-- App Script -->
+    <script src="index.js"></script>
+</body>
+
+</html>

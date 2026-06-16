@@ -7,15 +7,25 @@
 }
 
 :root {
-    --lyric-font-size: 36;
-    --trans-font-size: 18;
-    --main-color: #fff;
+    --lyric-font-size: 36px;
+    --trans-font-size: 18px;
+    --main-color: #ffffff;
     --resize-border-width: 6px;
-    --color-active: #fff;
+    --color-active: #ffffff;
     --color-inactive: rgba(255, 255, 255, 0.3);
+    --hover-bg-color: rgba(0, 0, 0, 0.2);
+    --hover-bg-blur: 10px;
 }
 
 body {
+    background: transparent;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#app {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -25,69 +35,60 @@ body {
     padding: 12px;
     color: var(--main-color);
     overflow: visible;
-    scrollbar-width: none;
     transition: opacity 0.3s;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    border-radius: 16px;
 }
 
 /* ---------------------------------------------------- */
 /* 1. 窗口拖拽层 (用于移动窗口) */
 /* ---------------------------------------------------- */
-body .drag-area {
+#app .drag-area {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     border-radius: 16px;
-    /* 歌词主体可以拖动：背景透明 */
     background-color: transparent;
     backdrop-filter: blur(0);
     z-index: 0;
     opacity: 1;
-    /* 默认移动光标 */
     cursor: grab;
-    transition: background-color 0.3s;
+    transition: background-color 0.3s, backdrop-filter 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
 
-    /* 歌词内容区禁止拖拽 */
+    /* 限制内容区和工具条不能被拖拽 */
     &~header,
     &~main {
         -webkit-app-region: no-drag;
     }
 }
 
-/* 鼠标悬停时给一个视觉提示 */
-body:hover .drag-area {
-    background-color: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(10px);
+#app:hover .drag-area {
+    background-color: var(--hover-bg-color);
+    backdrop-filter: blur(var(--hover-bg-blur));
     cursor: grab;
 }
 
-/* 正在拖动时 */
-body.is-dragging .drag-area {
+#app.is-dragging .drag-area {
     cursor: grabbing;
 }
 
 /* ---------------------------------------------------- */
 /* 2. 边框/拉伸把手 (用于拉伸窗口) */
 /* ---------------------------------------------------- */
-
 .resize-handle {
     position: absolute;
     z-index: 10;
-    /* 确保在拖拽层之上 */
-    /* 默认隐藏，鼠标悬停时显示 */
     background-color: transparent;
     border: 1px solid transparent;
     opacity: 0;
     transition: opacity 0.3s;
 }
 
-/* 鼠标悬停 body 时显示边框 */
-body:hover .resize-handle {
+#app:hover .resize-handle {
     opacity: 1;
 }
 
@@ -169,9 +170,8 @@ body:hover .resize-handle {
     cursor: nwse-resize;
 }
 
-
 /* 锁定歌词状态 */
-body.lock-lyric {
+#app.lock-lyric {
     cursor: none;
     pointer-events: none;
 
@@ -179,11 +179,11 @@ body.lock-lyric {
         pointer-events: none;
     }
 
-    /* 锁定后隐藏拖拽层和拉伸把手 */
     & .drag-area:hover,
     & .resize-handle {
         opacity: 0 !important;
         background-color: transparent !important;
+        backdrop-filter: blur(0) !important;
     }
 }
 
@@ -212,9 +212,8 @@ header {
                 border-radius: 4px;
                 cursor: pointer;
                 pointer-events: auto;
-                transition:
-                    transform 0.3s,
-                    background-color 0.3s;
+                transition: transform 0.3s, background-color 0.3s;
+                color: var(--main-color);
 
                 &:hover {
                     background-color: rgba(0, 0, 0, 0.4);
@@ -230,30 +229,30 @@ header {
                 }
             }
         }
-
     }
 }
 
-body:hover header .tools {
+#app:hover header .tools {
     opacity: 1;
 }
 
-body.lock-lyric:hover header .tools {
+#app.lock-lyric:hover header .tools {
     opacity: 0;
 }
 
 main {
-    flex-grow: 1;
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     width: 100%;
     padding: 0 12px;
     z-index: 1;
-    pointer-events: auto;
+    pointer-events: none;
     text-align: center;
     overflow: hidden;
-    justify-content: center;
+    min-height: 0;
 }
 
 #lyric-text-container {
@@ -261,44 +260,32 @@ main {
     overflow: hidden;
     display: flex;
     justify-content: center;
-    /* 两侧遮罩渐隐 */
-    /* mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent); */
-    /* -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent); */
+    position: relative;
+    align-items: center;
+    flex: 1;
+    min-height: 0;
 }
 
-#lyric-text {
-    font-size: calc(var(--lyric-font-size) * 1px);
+.lyric-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+}
+
+.plain-line {
+    font-size: var(--lyric-font-size);
     font-weight: bold;
     display: inline-block;
     white-space: nowrap;
     line-height: 1.35;
-    will-change: transform, background-position-x; /* 性能优化 */
-    
-    /* 确保位移和染色都使用线性过渡，时间保持一致 */
-    transition: background-position-x 0.25s linear, transform 0.25s linear;
+    will-change: transform;
+    transition: transform 0.2s linear;
 }
-
-#lyric-tran {
-    font-size: calc(var(--trans-font-size) * 1px);
-    margin-top: 4px;
-    opacity: 0.6;
-    text-align: center;
-    max-width: 100%;
-    flex-wrap: wrap;
-    line-height: 1.3;
-    flex-shrink: 0;
-    color: var(--main-color);
-}
-
-.hidden {
-    display: none !important;
-}
-
-/* ---------------------------------------------------- */
-/* KTV 歌词核心样式 */
-/* ---------------------------------------------------- */
 
 .ktv-line {
+    font-size: var(--lyric-font-size);
     display: inline-block;
     font-weight: bold;
     background-image: linear-gradient(to right, var(--color-active) 50%, var(--color-inactive) 50%);
@@ -309,6 +296,66 @@ main {
     background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    will-change: background-position-x;
-    white-space: pre-wrap;
+    will-change: background-position-x, transform;
+    white-space: nowrap;
+    line-height: 1.35;
+    transition: background-position-x 0.2s linear, transform 0.2s linear;
+}
+
+#lyric-tran-container {
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    position: relative;
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.lyric-tran-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+}
+
+#lyric-tran {
+    font-size: var(--trans-font-size);
+    opacity: 0.6;
+    text-align: center;
+    max-width: 100%;
+    white-space: nowrap;
+    line-height: 1.3;
+    flex-shrink: 0;
+    color: var(--main-color);
+}
+
+/* ---------------------------------------------------- */
+/* Vue Slide-up Step Transition Animations */
+/* ---------------------------------------------------- */
+.lyric-scroll-enter-active,
+.lyric-scroll-leave-active {
+  transition: all 0.4s cubic-bezier(0.55, 0, 0.1, 1);
+}
+
+.lyric-scroll-leave-to {
+  transform: translateY(-100%);
+}
+
+.lyric-scroll-enter-from {
+  transform: translateY(100%);
+}
+
+.lyric-scroll-leave-active {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.hidden {
+    display: none !important;
 }
