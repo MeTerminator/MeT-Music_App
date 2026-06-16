@@ -1,6 +1,6 @@
 {
     "name": "metmusic-app",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "MeT-Music_App",
     "main": "src/main/index.js",
     "scripts": {

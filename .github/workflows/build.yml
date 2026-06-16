@@ -1,0 +1,93 @@
+name: Build and Package App
+
+on:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+  push:
+    tags:
+      - 'v*' # Trigger on version tags (e.g., v1.2.0)
+
+# Grant write permission to the GITHUB_TOKEN to create/update releases
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.22.0 # Matches the version in package.json
+
+      - name: Get pnpm store directory
+        shell: bash
+        id: pnpm-cache
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build and Package App
+        env:
+          # Disable macOS identity auto-discovery to prevent builds from failing due to lack of local certificates.
+          # If you have signing certificates, you can configure them via secrets later.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            pnpm run dist:mac
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            pnpm run dist:win
+          else
+            pnpm run dist:linux
+          fi
+        shell: bash
+
+      - name: Upload Artifacts to Action Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: metmusic-app-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+          if-no-files-found: error
+
+      - name: Upload Release Assets (on version tag push)
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
