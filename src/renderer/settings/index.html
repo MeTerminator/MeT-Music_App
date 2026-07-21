@@ -97,6 +97,85 @@
                 </div>
             </section>
 
+            <!-- Position & Offset Control Module -->
+            <section class="settings-section">
+                <h3>位置与位移控制</h3>
+                
+                <!-- Visual Interactive Drag Pad -->
+                <div class="setting-item drag-pad-container">
+                    <div class="pad-header">
+                        <label>位移拖动面板 (拖拽圆点调位置)</label>
+                        <span class="screen-info">屏幕: {{ screenSize.width }} × {{ screenSize.height }}</span>
+                    </div>
+                    <div class="drag-pad-wrapper" ref="padRef" @mousedown="onPadMouseDown">
+                        <div class="drag-pad-screen">
+                            <div class="drag-pad-handle" :style="padHandleStyle">
+                                <span class="handle-pulse"></span>
+                                <span class="handle-label">歌词</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step / Directional Controller -->
+                <div class="setting-item flex-col">
+                    <div class="step-header">
+                        <label>方向微调位移</label>
+                        <div class="step-selector">
+                            <button v-for="step in [1, 10, 50]" :key="step" 
+                                    class="step-btn" :class="{ active: moveStep === step }"
+                                    @click="moveStep = step">
+                                {{ step }}px
+                            </button>
+                        </div>
+                    </div>
+                    <div class="dpad-grid">
+                        <div></div>
+                        <button class="dpad-btn" @click="moveOffset(0, -moveStep)" title="向上移动">▲</button>
+                        <div></div>
+                        <button class="dpad-btn" @click="moveOffset(-moveStep, 0)" title="向左移动">◄</button>
+                        <button class="dpad-btn dpad-center" @click="alignPosition('center')" title="屏幕中央">●</button>
+                        <button class="dpad-btn" @click="moveOffset(moveStep, 0)" title="向右移动">►</button>
+                        <div></div>
+                        <button class="dpad-btn" @click="moveOffset(0, moveStep)" title="向下移动">▼</button>
+                        <div></div>
+                    </div>
+                </div>
+
+                <!-- Numeric Position Inputs & Sliders -->
+                <div class="setting-item">
+                    <div class="coord-label-row">
+                        <label>X 轴位置 (水平): {{ windowX }} px</label>
+                    </div>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="windowX" :min="0" :max="Math.max(1, screenSize.width - windowWidth)" @input="onCoordInputChange">
+                        <input type="number" class="num-input" v-model.number="windowX" @change="onCoordInputChange">
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <div class="coord-label-row">
+                        <label>Y 轴位置 (垂直): {{ windowY }} px</label>
+                    </div>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="windowY" :min="0" :max="Math.max(1, screenSize.height - windowHeight)" @input="onCoordInputChange">
+                        <input type="number" class="num-input" v-model.number="windowY" @change="onCoordInputChange">
+                    </div>
+                </div>
+
+                <!-- Preset Quick Buttons -->
+                <div class="setting-item flex-col">
+                    <label>快捷位置预设</label>
+                    <div class="preset-btn-row">
+                        <button class="btn btn-preset" @click="alignPosition('top-center')">顶部居中</button>
+                        <button class="btn btn-preset" @click="alignPosition('bottom-center')">底部居中</button>
+                        <button class="btn btn-preset" @click="alignPosition('center')">屏幕中央</button>
+                        <button class="btn btn-preset" @click="alignPosition('left')">靠左</button>
+                        <button class="btn btn-preset" @click="alignPosition('right')">靠右</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Switches -->
             <section class="settings-section">
                 <h3>其他选项</h3>

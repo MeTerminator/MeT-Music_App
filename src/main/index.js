@@ -71,9 +71,7 @@ function setupIPC() {
         currentConfig.isLock = isLock;
         config.saveConfig(currentConfig);
 
-        const lyricWindow = windowManager.getLyricWindow();
-        lyricWindow?.setIgnoreMouseEvents(isLock, { forward: true });
-
+        windowManager.setLyricWindowLock(isLock);
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
     });
 
@@ -84,6 +82,14 @@ function setupIPC() {
 
     ipcMain.on('move-window', (event, newX, newY) => {
         windowManager.moveLyricWindow(newX, newY);
+    });
+
+    ipcMain.on('update-lyric-position', (event, newX, newY) => {
+        windowManager.moveLyricWindow(newX, newY);
+        const currentConfig = config.getConfig();
+        currentConfig.windowX = newX;
+        currentConfig.windowY = newY;
+        config.saveConfig(currentConfig);
     });
 
     ipcMain.on('resize-window', (event, x, y, width, height) => {
@@ -126,7 +132,7 @@ function setupIPC() {
 
         const lyricWindow = windowManager.getLyricWindow();
         if (lyricWindow) {
-            lyricWindow.setIgnoreMouseEvents(newConfig.isLock, { forward: true });
+            windowManager.setLyricWindowLock(newConfig.isLock);
             lyricWindow.webContents.send('lyric-config-changed', newConfig);
         }
 

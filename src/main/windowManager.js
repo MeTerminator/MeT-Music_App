@@ -144,6 +144,21 @@ function createMainWindow() {
     return mainWindow;
 }
 
+function setLyricWindowLock(isLock) {
+    if (!lyricWindow) return;
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+        lyricWindow.setIgnoreMouseEvents(isLock, { forward: true });
+    } else {
+        lyricWindow.setIgnoreMouseEvents(isLock);
+    }
+}
+
+function notifyBoundsChanged() {
+    if (settingsWindow && !settingsWindow.isDestroyed() && lyricWindow && !lyricWindow.isDestroyed()) {
+        settingsWindow.webContents.send('lyric-bounds-changed', lyricWindow.getBounds());
+    }
+}
+
 function createLyricWindow() {
     if (lyricWindow) return lyricWindow;
 
@@ -154,7 +169,7 @@ function createLyricWindow() {
     const finalX = (currentConfig.windowX !== undefined && currentConfig.windowX !== null) ? currentConfig.windowX : 0;
     const finalY = (currentConfig.windowY !== undefined && currentConfig.windowY !== null) ? currentConfig.windowY : 0;
 
-    lyricWindow = new BrowserWindow({
+    const windowOptions = {
         width: currentLyricWidth,
         height: currentLyricHeight,
         x: finalX,
@@ -172,7 +187,19 @@ function createLyricWindow() {
             contextIsolation: true,
             nodeIntegration: false
         }
-    });
+    };
+
+    if (process.platform === 'linux') {
+        windowOptions.type = 'toolbar';
+    }
+
+    lyricWindow = new BrowserWindow(windowOptions);
+
+    lyricWindow.setAlwaysOnTop(true, 'screen-saver');
+
+    if (lyricWindow.setVisibleOnAllWorkspaces) {
+        lyricWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
 
     lyricWindow.loadFile(path.join(__dirname, "..", "renderer", "desktop-lyrics", "index.html"));
 
@@ -188,10 +215,15 @@ function createLyricWindow() {
                 lyricWindow.setSize(currentLyricWidth, currentLyricHeight);
             }
         }
+        notifyBoundsChanged();
+    });
+
+    lyricWindow.on('move', () => {
+        notifyBoundsChanged();
     });
 
     lyricWindow.webContents.on("did-finish-load", () => {
-        lyricWindow.setIgnoreMouseEvents(currentConfig.isLock, { forward: true });
+        setLyricWindowLock(currentConfig.isLock);
         lyricWindow.webContents.send('lyric-config-changed', currentConfig);
     });
 
@@ -206,8 +238,8 @@ function createSettingsWindow() {
     }
 
     settingsWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
+        width: 520,
+        height: 720,
         frame: false,
         transparent: true,
         resizable: false,
@@ -248,7 +280,8 @@ function moveLyricWindow(newX, newY) {
     finalX = Math.min(x + width - currentWidth, finalX);
     finalY = Math.min(y + height - currentHeight, finalY);
 
-    lyricWindow.setBounds({ x: finalX, y: finalY, width: currentWidth, height: currentHeight });
+    lyricWindow.setBounds({ x: Math.round(finalX), y: Math.round(finalY), width: currentWidth, height: currentHeight });
+    notifyBoundsChanged();
 }
 
 function resizeLyricWindow(x, y, width, height) {
@@ -267,6 +300,7 @@ function resizeLyricWindow(x, y, width, height) {
 
     // Notify renderer of the updated size
     lyricWindow.webContents.send('window-resized', currentLyricWidth, currentLyricHeight);
+    notifyBoundsChanged();
 
     setTimeout(() => {
         isResizing = false;
@@ -292,5 +326,6 @@ module.exports = {
     setQuitting: (val) => { isQuiting = val; },
     moveLyricWindow,
     resizeLyricWindow,
+    setLyricWindowLock,
     getScreenWidth
 };

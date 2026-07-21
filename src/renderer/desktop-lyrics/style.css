@@ -60,6 +60,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    -webkit-app-region: drag;
 
     /* 限制内容区和工具条不能被拖拽 */
     &~header,
@@ -176,9 +177,11 @@ body {
 #app.lock-lyric {
     cursor: none;
     pointer-events: none;
+    -webkit-app-region: no-drag !important;
 
     * {
         pointer-events: none;
+        -webkit-app-region: no-drag !important;
     }
 
     & .drag-area:hover,

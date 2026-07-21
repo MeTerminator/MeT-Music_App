@@ -1,4 +1,4 @@
-const { createApp, ref, onMounted } = Vue;
+const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
 createApp({
     setup() {
@@ -24,6 +24,114 @@ createApp({
         const inactiveColorHex = ref('#ffffff');
         const inactiveOpacity = ref(30);
         const bgColorHex = ref('#000000');
+
+        // Screen & Window Bounds State for Position Control
+        const screenSize = ref({ width: 1920, height: 1080 });
+        const windowX = ref(0);
+        const windowY = ref(0);
+        const windowWidth = ref(1200);
+        const windowHeight = ref(130);
+
+        // Step & Pad state
+        const moveStep = ref(10);
+        const padRef = ref(null);
+        const isPadDragging = ref(false);
+
+        // Computed style for drag pad indicator handle
+        const padHandleStyle = computed(() => {
+            const maxX = Math.max(1, screenSize.value.width - windowWidth.value);
+            const maxY = Math.max(1, screenSize.value.height - windowHeight.value);
+            const percentX = Math.max(0, Math.min(1, windowX.value / maxX));
+            const percentY = Math.max(0, Math.min(1, windowY.value / maxY));
+
+            return {
+                left: `${(percentX * 100).toFixed(2)}%`,
+                top: `${(percentY * 100).toFixed(2)}%`
+            };
+        });
+
+        const updatePosition = (newX, newY) => {
+            const maxX = Math.max(0, screenSize.value.width - windowWidth.value);
+            const maxY = Math.max(0, screenSize.value.height - windowHeight.value);
+            const clampedX = Math.max(0, Math.min(maxX, Math.round(newX)));
+            const clampedY = Math.max(0, Math.min(maxY, Math.round(newY)));
+
+            windowX.value = clampedX;
+            windowY.value = clampedY;
+
+            window.electron.ipcRenderer.send("update-lyric-position", clampedX, clampedY);
+        };
+
+        const onCoordInputChange = () => {
+            updatePosition(windowX.value, windowY.value);
+        };
+
+        const moveOffset = (deltaX, deltaY) => {
+            updatePosition(windowX.value + deltaX, windowY.value + deltaY);
+        };
+
+        const alignPosition = (preset) => {
+            const sw = screenSize.value.width;
+            const sh = screenSize.value.height;
+            const ww = windowWidth.value;
+            const wh = windowHeight.value;
+
+            let targetX = windowX.value;
+            let targetY = windowY.value;
+
+            switch (preset) {
+                case 'top-center':
+                    targetX = Math.round((sw - ww) / 2);
+                    targetY = 0;
+                    break;
+                case 'bottom-center':
+                    targetX = Math.round((sw - ww) / 2);
+                    targetY = Math.max(0, sh - wh);
+                    break;
+                case 'center':
+                    targetX = Math.round((sw - ww) / 2);
+                    targetY = Math.round((sh - wh) / 2);
+                    break;
+                case 'left':
+                    targetX = 0;
+                    break;
+                case 'right':
+                    targetX = Math.max(0, sw - ww);
+                    break;
+            }
+
+            updatePosition(targetX, targetY);
+        };
+
+        // Drag pad event handlers
+        const handlePadMove = (e) => {
+            if (!isPadDragging.value || !padRef.value) return;
+            const rect = padRef.value.getBoundingClientRect();
+            const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+            const mouseY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+            const percentX = mouseX / rect.width;
+            const percentY = mouseY / rect.height;
+
+            const targetX = percentX * Math.max(0, screenSize.value.width - windowWidth.value);
+            const targetY = percentY * Math.max(0, screenSize.value.height - windowHeight.value);
+
+            updatePosition(targetX, targetY);
+        };
+
+        const onPadMouseDown = (e) => {
+            isPadDragging.value = true;
+            handlePadMove(e);
+
+            const onMouseUp = () => {
+                isPadDragging.value = false;
+                window.removeEventListener('mousemove', handlePadMove);
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+
+            window.addEventListener('mousemove', handlePadMove);
+            window.addEventListener('mouseup', onMouseUp);
+        };
 
         const closeSettings = () => {
             window.electron.ipcRenderer.send("close-settings-window");
@@ -124,6 +232,30 @@ createApp({
                 config.value = { ...config.value, ...currentConfig };
                 parseConfigColors();
             }
+
+            try {
+                const screen = await window.electron.ipcRenderer.invoke("get-screen-size");
+                if (screen) screenSize.value = screen;
+
+                const bounds = await window.electron.ipcRenderer.invoke("get-window-bounds");
+                if (bounds) {
+                    windowX.value = bounds.x;
+                    windowY.value = bounds.y;
+                    windowWidth.value = bounds.width;
+                    windowHeight.value = bounds.height;
+                }
+            } catch (e) {
+                console.error("Failed to retrieve screen/window bounds:", e);
+            }
+
+            window.electron.ipcRenderer.on("lyric-bounds-changed", (_, bounds) => {
+                if (bounds && !isPadDragging.value) {
+                    windowX.value = bounds.x;
+                    windowY.value = bounds.y;
+                    windowWidth.value = bounds.width;
+                    windowHeight.value = bounds.height;
+                }
+            });
         });
 
         return {
@@ -131,6 +263,19 @@ createApp({
             inactiveColorHex,
             inactiveOpacity,
             bgColorHex,
+            screenSize,
+            windowX,
+            windowY,
+            windowWidth,
+            windowHeight,
+            moveStep,
+            padRef,
+            padHandleStyle,
+            updatePosition,
+            onCoordInputChange,
+            moveOffset,
+            alignPosition,
+            onPadMouseDown,
             closeSettings,
             updateConfig,
             updateInactiveColor,
