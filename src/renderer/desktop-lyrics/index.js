@@ -143,7 +143,7 @@ createApp({
         // Window drag logic
         const startDrag = async (event) => {
             if (config.value.isLock) return;
-            if (event.target.closest(".item")) return;
+            if (event.target.closest(".item") || event.target.closest(".resize-handle")) return;
 
             isDragging.value = true;
             const { screenX, screenY } = event;
@@ -160,6 +160,9 @@ createApp({
         // Window resize logic
         const startResize = async (event, dir) => {
             if (config.value.isLock) return;
+
+            event.stopPropagation();
+            event.preventDefault();
 
             isResizing.value = true;
             resizeDirection = dir;

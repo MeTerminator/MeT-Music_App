@@ -178,7 +178,7 @@ function createLyricWindow() {
         transparent: true,
         alwaysOnTop: true,
         skipTaskbar: true,
-        resizable: false,
+        resizable: true,
         show: true,
         maximizable: false,
         icon: path.join(__dirname, "..", "..", "public", "icons", "icon.png"),
@@ -188,10 +188,6 @@ function createLyricWindow() {
             nodeIntegration: false
         }
     };
-
-    if (process.platform === 'linux') {
-        windowOptions.type = 'toolbar';
-    }
 
     lyricWindow = new BrowserWindow(windowOptions);
 
@@ -265,22 +261,10 @@ function createSettingsWindow() {
 function moveLyricWindow(newX, newY) {
     if (!lyricWindow) return;
 
-    const currentWidth = currentLyricWidth;
-    const currentHeight = currentLyricHeight;
+    const finalX = Math.round(newX);
+    const finalY = Math.round(newY);
 
-    const cursorPoint = screen.getCursorScreenPoint();
-    const display = screen.getDisplayMatching({ x: cursorPoint.x, y: cursorPoint.y, width: 1, height: 1 });
-    const { x, y, width, height } = display.bounds;
-
-    let finalX = newX;
-    let finalY = newY;
-
-    finalX = Math.max(x, finalX);
-    finalY = Math.max(y, finalY);
-    finalX = Math.min(x + width - currentWidth, finalX);
-    finalY = Math.min(y + height - currentHeight, finalY);
-
-    lyricWindow.setBounds({ x: Math.round(finalX), y: Math.round(finalY), width: currentWidth, height: currentHeight });
+    lyricWindow.setPosition(finalX, finalY);
     notifyBoundsChanged();
 }
 
