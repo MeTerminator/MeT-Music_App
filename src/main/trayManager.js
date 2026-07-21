@@ -32,33 +32,45 @@ function createTray(onPlayPrev, onPlayNext, onPlayOrPause) {
     }, onPlayPrev, onPlayNext, onPlayOrPause);
 }
 
-function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
+let lastTrayState = null;
+
+function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, force = false) {
     if (!tray || tray.isDestroyed()) return;
 
     const currentConfig = config.getConfig();
     const lyricVisible = windowManager.isLyricWindowVisible();
 
+    const currentState = {
+        songName: (currentSong && currentSong.songName) || '',
+        songArtist: (currentSong && currentSong.songArtist) || '',
+        isPlaying: (currentSong && !!currentSong.isPlaying) || false,
+        lyricVisible: !!lyricVisible,
+        showTranslation: !!currentConfig.showTranslation,
+        isLock: !!currentConfig.isLock
+    };
+
+    if (!force && lastTrayState &&
+        lastTrayState.songName === currentState.songName &&
+        lastTrayState.songArtist === currentState.songArtist &&
+        lastTrayState.isPlaying === currentState.isPlaying &&
+        lastTrayState.lyricVisible === currentState.lyricVisible &&
+        lastTrayState.showTranslation === currentState.showTranslation &&
+        lastTrayState.isLock === currentState.isLock) {
+        return;
+    }
+
+    lastTrayState = currentState;
+
     const template = [];
 
-    if (currentSong && currentSong.isPlaying) {
+    if (currentState.isPlaying) {
         template.push(
-            { label: `🎵 歌曲: ${currentSong.songName}` },
-            { label: `👤 歌手: ${currentSong.songArtist}` },
-            { label: `⌛ 进度: ${formatTime(currentSong.currentTime)} / ${formatTime(currentSong.duration)}` },
-            { type: 'separator' },
+            { label: `🎵 歌曲: ${currentState.songName}` },
+            { label: `👤 歌手: ${currentState.songArtist}` },
+            { type: 'separator' }
         );
     } else {
         template.push({ label: '未播放', enabled: false }, { type: 'separator' });
-    }
-
-    if (currentSong && currentSong.isPlaying && currentSong.lyricText) {
-        template.push({ label: `💬 歌词: ${currentSong.lyricText}` });
-    }
-    if (currentSong && currentSong.isPlaying && currentSong.lyricTrans && currentConfig.showTranslation) {
-        template.push({ label: `📄 翻译: ${currentSong.lyricTrans}` });
-    }
-    if (currentSong && currentSong.isPlaying && (currentSong.lyricText || (currentSong.lyricTrans && currentConfig.showTranslation))) {
-        template.push({ type: 'separator' });
     }
 
     template.push({
@@ -69,7 +81,7 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
     });
 
     template.push({
-        label: (currentSong && currentSong.isPlaying) ? '⏸ 暂停' : '▶ 播放',
+        label: currentState.isPlaying ? '⏸ 暂停' : '▶ 播放',
         click: () => {
             onPlayOrPause();
         }
@@ -87,10 +99,10 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
     template.push({
         label: '显示桌面歌词',
         type: 'checkbox',
-        checked: lyricVisible,
+        checked: currentState.lyricVisible,
         click: () => {
             windowManager.toggleLyricWindowVisibility();
-            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause);
+            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, true);
         }
     });
 
@@ -105,7 +117,7 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
             if (lyricWindow) {
                 lyricWindow.webContents.send('lyric-config-changed', currentConfig);
             }
-            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause);
+            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, true);
         }
     });
 
@@ -116,12 +128,12 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
         click: () => {
             currentConfig.isLock = !currentConfig.isLock;
             config.saveConfig(currentConfig);
+            windowManager.setLyricWindowLock(currentConfig.isLock);
             const lyricWindow = windowManager.getLyricWindow();
             if (lyricWindow) {
-                lyricWindow.setIgnoreMouseEvents(currentConfig.isLock, { forward: true });
                 lyricWindow.webContents.send('lyric-config-changed', currentConfig);
             }
-            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause);
+            updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, true);
         }
     });
 
@@ -154,13 +166,6 @@ function updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause) {
     });
 
     tray.setContextMenu(Menu.buildFromTemplate(template));
-}
-
-function formatTime(seconds) {
-    if (!seconds) return '00:00';
-    const min = Math.floor(seconds / 60);
-    const sec = Math.floor(seconds % 60);
-    return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 function destroyTray() {
