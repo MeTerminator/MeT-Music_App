@@ -30,8 +30,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0 # Matches the version in package.json
 
       - name: Get pnpm store directory
         shell: bash
