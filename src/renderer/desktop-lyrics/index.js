@@ -5,6 +5,7 @@ createApp({
         const lyricText = ref('MeT-Music');
         const lyricTrans = ref('');
         const lyricData = ref([]);
+        const lyricLineKey = ref(0);
         const isPlaying = ref(false);
         const isDragging = ref(false);
         const isResizing = ref(false);
@@ -12,6 +13,10 @@ createApp({
         const config = ref({
             fontSize: 36,
             transFontSize: 18,
+            lyricFontFamily: '',
+            translationFontFamily: '',
+            lyricFontWeight: 700,
+            translationFontWeight: 400,
             textColor: '#ffffff',
             colorActive: '#ffffff',
             colorInactive: 'rgba(255, 255, 255, 0.3)',
@@ -21,7 +26,7 @@ createApp({
             bgBlur: 10,
             useThemeColorForActive: true,
             textOpacity: 100,
-            strokeWidth: 1,
+            strokeWidth: 0,
             strokeColor: '#000000',
             overallOpacity: 90,
             transFontSizeScale: 23,
@@ -58,6 +63,12 @@ createApp({
         // KTV states
         const ktvProgressPercent = ref(0);
         const translateX = ref(0);
+        let latestLyricData = [];
+        let currentLineSignature = '';
+        let currentThemeSignature = '';
+        let ktvLayoutMetrics = null;
+        let ktvAnimationFrame = null;
+        let layoutStyleSignature = '';
 
         // The fixed overhead: #app padding (12px*2) + header tools (~20px)
         const LAYOUT_OVERHEAD = 44;
@@ -96,8 +107,14 @@ createApp({
         const appEl = document.getElementById('app');
         watchEffect(() => {
             if (!appEl) return;
+            const lyricFontFamily = config.value.lyricFontFamily?.trim() || 'inherit';
+            const lyricFontWeight = String(config.value.lyricFontWeight ?? 700);
             appEl.style.setProperty('--lyric-font-size', computedFontSize.value + 'px');
             appEl.style.setProperty('--trans-font-size', computedTransFontSize.value + 'px');
+            appEl.style.setProperty('--lyric-font-family', lyricFontFamily);
+            appEl.style.setProperty('--translation-font-family', config.value.translationFontFamily?.trim() || 'inherit');
+            appEl.style.setProperty('--lyric-font-weight', lyricFontWeight);
+            appEl.style.setProperty('--translation-font-weight', String(config.value.translationFontWeight ?? 400));
             appEl.style.setProperty('--main-color', hexToRgba(config.value.textColor, config.value.textOpacity));
             appEl.style.setProperty('--color-active', activeColor.value);
             appEl.style.setProperty('--color-inactive', config.value.colorInactive);
@@ -111,6 +128,12 @@ createApp({
             
             appEl.classList.toggle('lock-lyric', config.value.isLock);
             appEl.classList.toggle('is-dragging', isDragging.value);
+
+            const nextLayoutStyleSignature = `${computedFontSize.value}|${lyricFontFamily}|${lyricFontWeight}`;
+            if (nextLayoutStyleSignature !== layoutStyleSignature) {
+                layoutStyleSignature = nextLayoutStyleSignature;
+                ktvLayoutMetrics = null;
+            }
         });
 
         const ktvStyle = computed(() => {
@@ -126,6 +149,24 @@ createApp({
                 transform: `translateX(${translateX.value}px)`
             };
         });
+
+        // KTV word progress is monotonic within one lyric line. A drop therefore
+        // identifies a new line even when two adjacent lines have identical text.
+        let previousDataProgress = null;
+        const getDataProgress = (data) => {
+            if (!Array.isArray(data) || data.length === 0) return null;
+
+            let total = 0;
+            let count = 0;
+            for (const word of data) {
+                const progress = Number(word?.percent);
+                if (!Number.isFinite(progress)) continue;
+                total += progress;
+                count += 1;
+            }
+
+            return count > 0 ? total / count : null;
+        };
 
         // Action Handlers
         const showApp = () => window.electron.ipcRenderer.send("show-window");
@@ -245,39 +286,50 @@ createApp({
             }
         };
 
-        // KTV Calculation
+        const measureKtvLayout = () => {
+            const lineDom = lineRef.value;
+            const containerDom = containerRef.value;
+            if (!lineDom || !containerDom || latestLyricData.length === 0) {
+                ktvLayoutMetrics = null;
+                return;
+            }
+
+            const spans = lineDom.querySelectorAll(".ktv-word");
+            if (spans.length !== latestLyricData.length) {
+                ktvLayoutMetrics = null;
+                return;
+            }
+
+            const lineWidth = Math.max(1, lineDom.offsetWidth);
+            ktvLayoutMetrics = {
+                spanWidthRatios: Array.from(spans, span => span.offsetWidth / lineWidth),
+                textWidth: lineDom.scrollWidth,
+                containerWidth: containerDom.offsetWidth
+            };
+        };
+
+        // Progress updates reuse cached layout metrics. Layout is measured only
+        // when the lyric line, font, or window size changes.
         const updateKtvProgress = () => {
-            if (!lyricData.value || lyricData.value.length === 0) {
+            if (latestLyricData.length === 0) {
                 ktvProgressPercent.value = 0;
                 translateX.value = 0;
                 return;
             }
 
-            const lineDom = lineRef.value;
-            if (!lineDom) return;
-
-            let lineWidth = lineDom.offsetWidth;
-            if (lineWidth === 0) lineWidth = 1;
-
-            const spans = lineDom.querySelectorAll(".ktv-word");
-            if (spans.length !== lyricData.value.length) return;
+            if (!ktvLayoutMetrics) measureKtvLayout();
+            if (!ktvLayoutMetrics) return;
 
             let percent = 0;
-            const spanWidths = Array.from(spans).map(span => span.offsetWidth);
-            const spanWidthsPercent = spanWidths.map(w => w / lineWidth);
-
-            for (let i = 0; i < spanWidthsPercent.length; i++) {
-                percent += spanWidthsPercent[i] * (lyricData.value[i].percent || 0);
+            for (let i = 0; i < ktvLayoutMetrics.spanWidthRatios.length; i++) {
+                percent += ktvLayoutMetrics.spanWidthRatios[i] * (latestLyricData[i].percent || 0);
             }
 
             percent = Math.max(0, Math.min(1, percent));
             ktvProgressPercent.value = percent;
 
             // Scroll calculation
-            const textWidth = lineDom.scrollWidth;
-            const containerDom = containerRef.value;
-            if (!containerDom) return;
-            const containerWidth = containerDom.offsetWidth;
+            const { textWidth, containerWidth } = ktvLayoutMetrics;
 
             if (textWidth > containerWidth) {
                 const startLeft = (containerWidth - textWidth) / 2;
@@ -294,6 +346,14 @@ createApp({
             }
         };
 
+        const scheduleKtvProgressUpdate = () => {
+            if (ktvAnimationFrame !== null) return;
+            ktvAnimationFrame = requestAnimationFrame(() => {
+                ktvAnimationFrame = null;
+                updateKtvProgress();
+            });
+        };
+
         // IPC Listeners
         const setupIPC = async () => {
             const windowSystem = await window.electron.ipcRenderer.invoke("get-window-system");
@@ -307,20 +367,45 @@ createApp({
             window.electron.ipcRenderer.on("play-lyric-change", (_, data) => {
                 if (!data) return;
 
-                // Reset KTV progress synchronously when the lyric line changes to prevent backward transition
-                if (data.lyricText !== lyricText.value) {
+                const nextText = data.lyricText || "";
+                const nextLyricData = data.lyricData || [];
+                const nextDataProgress = getDataProgress(nextLyricData);
+                const textChanged = nextText !== lyricText.value;
+                const nextLineSignature = nextLyricData.map(word => word?.content || '').join('\u0001');
+                const structureChanged = nextLineSignature !== currentLineSignature;
+                const repeatedTextStartedNewLine = !textChanged &&
+                    previousDataProgress !== null &&
+                    nextDataProgress !== null &&
+                    nextDataProgress + 0.05 < previousDataProgress;
+                const lineChanged = textChanged || structureChanged || repeatedTextStartedNewLine;
+
+                // A separate line key forces Vue to run the line transition even
+                // when adjacent lyric lines contain exactly the same text.
+                if (lineChanged) {
                     ktvProgressPercent.value = 0;
                     translateX.value = 0;
+                    lyricLineKey.value += 1;
+                    lyricData.value = nextLyricData;
+                    currentLineSignature = nextLineSignature;
+                    ktvLayoutMetrics = null;
                 }
 
-                lyricText.value = data.lyricText || "";
+                lyricText.value = nextText;
                 lyricTrans.value = data.lyricTrans || "";
-                lyricData.value = data.lyricData || [];
-                coverTheme.value = data.coverTheme || null;
+                latestLyricData = nextLyricData;
 
-                nextTick(() => {
-                    updateKtvProgress();
-                });
+                const nextThemeSignature = JSON.stringify(data.coverTheme || null);
+                if (nextThemeSignature !== currentThemeSignature) {
+                    currentThemeSignature = nextThemeSignature;
+                    coverTheme.value = data.coverTheme || null;
+                }
+                previousDataProgress = nextDataProgress;
+
+                if (lineChanged) {
+                    nextTick(scheduleKtvProgressUpdate);
+                } else {
+                    scheduleKtvProgressUpdate();
+                }
             });
 
             window.electron.ipcRenderer.on("play-status-change", (_, state) => {
@@ -336,17 +421,15 @@ createApp({
             // Handle programmatic window resize events from the main process
             window.electron.ipcRenderer.on("window-resized", (_, w, h) => {
                 mainContentHeight.value = Math.max(50, h - LAYOUT_OVERHEAD);
-                nextTick(() => {
-                    updateKtvProgress();
-                });
+                ktvLayoutMetrics = null;
+                nextTick(scheduleKtvProgressUpdate);
             });
         };
 
         const handleWindowResize = () => {
             mainContentHeight.value = Math.max(50, window.innerHeight - LAYOUT_OVERHEAD);
-            nextTick(() => {
-                updateKtvProgress();
-            });
+            ktvLayoutMetrics = null;
+            nextTick(scheduleKtvProgressUpdate);
         };
 
         onMounted(() => {
@@ -357,6 +440,7 @@ createApp({
         });
 
         onUnmounted(() => {
+            if (ktvAnimationFrame !== null) cancelAnimationFrame(ktvAnimationFrame);
             window.removeEventListener("mousemove", handleMove);
             window.removeEventListener("mouseup", endInteraction);
             window.removeEventListener("resize", handleWindowResize);
@@ -366,6 +450,7 @@ createApp({
             lyricText,
             lyricTrans,
             lyricData,
+            lyricLineKey,
             isPlaying,
             isDragging,
             config,

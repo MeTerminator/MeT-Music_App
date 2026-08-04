@@ -9,6 +9,10 @@
 :root {
     --lyric-font-size: 36px;
     --trans-font-size: 18px;
+    --lyric-font-family: inherit;
+    --translation-font-family: inherit;
+    --lyric-font-weight: 700;
+    --translation-font-weight: 400;
     --main-color: #ffffff;
     --resize-border-width: 6px;
     --color-active: #ffffff;
@@ -313,19 +317,22 @@ main {
 
 .plain-line {
     font-size: var(--lyric-font-size);
-    font-weight: bold;
+    font-family: var(--lyric-font-family);
+    font-weight: var(--lyric-font-weight);
     display: inline-block;
     white-space: nowrap;
     line-height: 1.35;
     will-change: transform;
     transition: transform 0.2s linear;
+    paint-order: stroke fill;
     -webkit-text-stroke: var(--lyric-stroke-width) var(--lyric-stroke-color);
 }
 
 .ktv-line {
     font-size: var(--lyric-font-size);
+    font-family: var(--lyric-font-family);
     display: inline-block;
-    font-weight: bold;
+    font-weight: var(--lyric-font-weight);
     background-image: linear-gradient(to right, var(--color-active) 50%, var(--color-inactive) 50%);
     background-size: 200% 100%;
     background-position-x: 100%;
@@ -338,6 +345,7 @@ main {
     white-space: nowrap;
     line-height: 1.35;
     transition: background-position-x 0.2s linear, transform 0.2s linear;
+    paint-order: stroke fill;
     -webkit-text-stroke: var(--lyric-stroke-width) var(--lyric-stroke-color);
 }
 
@@ -362,6 +370,8 @@ main {
 
 #lyric-tran {
     font-size: var(--trans-font-size);
+    font-family: var(--translation-font-family);
+    font-weight: var(--translation-font-weight);
     opacity: 0.6;
     text-align: center;
     max-width: 100%;
@@ -369,6 +379,7 @@ main {
     line-height: 1.3;
     flex-shrink: 0;
     color: var(--main-color);
+    paint-order: stroke fill;
     -webkit-text-stroke: var(--lyric-stroke-width) var(--lyric-stroke-color);
 }
 

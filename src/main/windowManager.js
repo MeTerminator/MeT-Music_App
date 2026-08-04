@@ -290,8 +290,15 @@ function createSettingsWindow() {
         webPreferences: {
             preload: path.join(__dirname, "..", "preload", "preload.js"),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            partition: 'persist:settings'
         }
+    });
+
+    const settingsSession = settingsWindow.webContents.session;
+    settingsSession.setPermissionCheckHandler((_webContents, permission) => permission === 'local-fonts');
+    settingsSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+        callback(permission === 'local-fonts');
     });
 
     settingsWindow.loadFile(path.join(__dirname, "..", "renderer", "settings", "index.html"));

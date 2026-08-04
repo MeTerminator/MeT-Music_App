@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <title>桌面歌词设置</title>
+    <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -18,6 +19,79 @@
         <!-- Main Form -->
         <main class="settings-content">
 
+            <!-- Fonts -->
+            <section class="settings-section">
+                <h3>字体</h3>
+                <div class="setting-item">
+                    <label>歌词字体</label>
+                    <select class="select-input" v-model="config.lyricFontFamily" @change="updateConfig">
+                        <option value="">系统默认</option>
+                        <optgroup label="内置与系统推荐">
+                            <option v-for="font in featuredFonts" :key="font.value" :value="font.value">
+                                {{ font.label }}
+                            </option>
+                        </optgroup>
+                        <optgroup label="系统已安装字体" v-if="systemFonts.length">
+                            <option v-for="font in systemFonts" :key="font" :value="font">{{ font }}</option>
+                        </optgroup>
+                    </select>
+                    <label>歌词字重：{{ config.lyricFontWeight }}</label>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="config.lyricFontWeight"
+                               min="100" max="900" step="10" @input="updateConfig">
+                        <input type="number" class="num-input" v-model.number="config.lyricFontWeight"
+                               min="100" max="900" step="10" @change="updateConfig">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>翻译字体</label>
+                    <select class="select-input" v-model="config.translationFontFamily" @change="updateConfig">
+                        <option value="">系统默认</option>
+                        <optgroup label="内置与系统推荐">
+                            <option v-for="font in featuredFonts" :key="font.value" :value="font.value">
+                                {{ font.label }}
+                            </option>
+                        </optgroup>
+                        <optgroup label="系统已安装字体" v-if="systemFonts.length">
+                            <option v-for="font in systemFonts" :key="font" :value="font">{{ font }}</option>
+                        </optgroup>
+                    </select>
+                    <label>翻译字重：{{ config.translationFontWeight }}</label>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="config.translationFontWeight"
+                               min="100" max="900" step="10" @input="updateConfig">
+                        <input type="number" class="num-input" v-model.number="config.translationFontWeight"
+                               min="100" max="900" step="10" @change="updateConfig">
+                    </div>
+                </div>
+                <p class="font-status" v-if="fontLoadError">{{ fontLoadError }}</p>
+                <p class="font-license-note">
+                    本应用内置使用 HarmonyOS Sans（© Huawei Device Co., Ltd.），许可协议随字体文件一并分发。
+                </p>
+            </section>
+
+            <!-- Window Size -->
+            <section class="settings-section">
+                <h3>窗口尺寸</h3>
+                <div class="setting-item">
+                    <label>歌词窗口宽度：{{ windowWidth }} px</label>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="windowWidth" min="100"
+                               :max="Math.max(100, screenSize.width)" @input="updateWindowSize">
+                        <input type="number" class="num-input" v-model.number="windowWidth"
+                               min="100" :max="Math.max(100, screenSize.width)" @change="updateWindowSize">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>歌词窗口高度：{{ windowHeight }} px</label>
+                    <div class="range-wrapper flex-row-gap">
+                        <input type="range" v-model.number="windowHeight" min="50"
+                               :max="Math.max(50, screenSize.height)" @input="updateWindowSize">
+                        <input type="number" class="num-input" v-model.number="windowHeight"
+                               min="50" :max="Math.max(50, screenSize.height)" @change="updateWindowSize">
+                    </div>
+                </div>
+            </section>
 
             <!-- Colors -->
             <section class="settings-section">

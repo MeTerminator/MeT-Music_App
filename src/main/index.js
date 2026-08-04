@@ -26,24 +26,68 @@ let currentSong = {
     isPlaying: false
 };
 
+const LYRIC_UPDATE_INTERVAL = 50;
+let pendingLyricUpdate = null;
+let lyricUpdateTimer = null;
+let lastLyricUpdateTime = 0;
+let lastSongLabel = '';
+let lastPlayingState = null;
+
+function flushLyricUpdate() {
+    lyricUpdateTimer = null;
+    if (!pendingLyricUpdate) return;
+
+    const lyricWindow = windowManager.getLyricWindow();
+    const lyricUpdate = pendingLyricUpdate;
+    pendingLyricUpdate = null;
+    lastLyricUpdateTime = Date.now();
+
+    if (!lyricWindow || lyricWindow.isDestroyed() || !lyricWindow.isVisible()) return;
+
+    const currentConfig = config.getConfig();
+    lyricWindow.webContents.send('play-lyric-change', {
+        lyricText: lyricUpdate.lyricText,
+        lyricData: lyricUpdate.lyricData,
+        lyricTrans: currentConfig.showTranslation ? lyricUpdate.lyricTrans : '',
+        coverTheme: lyricUpdate.coverTheme
+    });
+}
+
+function scheduleLyricUpdate(data) {
+    pendingLyricUpdate = {
+        lyricText: data.lyricText || '',
+        lyricData: data.lyricData || [],
+        lyricTrans: data.lyricTrans || '',
+        coverTheme: data.coverTheme || null
+    };
+
+    if (lyricUpdateTimer) return;
+
+    const elapsed = Date.now() - lastLyricUpdateTime;
+    const delay = Math.max(0, LYRIC_UPDATE_INTERVAL - elapsed);
+    lyricUpdateTimer = setTimeout(flushLyricUpdate, delay);
+}
+
 function setupIPC() {
     ipcMain.on('metmusic-hook', (_event, data) => {
         currentSong = { ...currentSong, ...data };
-
-        const currentConfig = config.getConfig();
         const lyricWindow = windowManager.getLyricWindow();
 
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
 
-        if (lyricWindow) {
-            lyricWindow.webContents.send('play-song-change', `${data.songName} - ${data.songArtist}`);
-            lyricWindow.webContents.send('play-lyric-change', {
-                lyricText: data.lyricText,
-                lyricData: data.lyricData,
-                lyricTrans: currentConfig.showTranslation ? data.lyricTrans : '',
-                coverTheme: data.coverTheme
-            });
-            lyricWindow.webContents.send('play-status-change', data.isPlaying);
+        if (lyricWindow && !lyricWindow.isDestroyed()) {
+            const songLabel = `${currentSong.songName} - ${currentSong.songArtist}`;
+            if (songLabel !== lastSongLabel) {
+                lastSongLabel = songLabel;
+                lyricWindow.webContents.send('play-song-change', songLabel);
+            }
+
+            if (currentSong.isPlaying !== lastPlayingState) {
+                lastPlayingState = currentSong.isPlaying;
+                lyricWindow.webContents.send('play-status-change', currentSong.isPlaying);
+            }
+
+            scheduleLyricUpdate(currentSong);
         }
     });
 
@@ -168,13 +212,17 @@ function playOrPause() {
     windowManager.getMainWindow()?.webContents.executeJavaScript(`window.$MeTMusic_playOrPause();`);
 }
 
-app.on('second-instance', () => {
-    const mainWindow = windowManager.getMainWindow();
-    if (mainWindow) {
-        mainWindow.show();
-        mainWindow.focus();
-    }
-});
+function showMainWindow() {
+    const mainWindow = windowManager.getMainWindow() || windowManager.createMainWindow();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+}
+
+app.on('second-instance', showMainWindow);
+
+// macOS emits activate when the user clicks the running app's Dock icon.
+app.on('activate', showMainWindow);
 
 app.on("window-all-closed", () => {
     // Remain running in background (tray icon handles quit)

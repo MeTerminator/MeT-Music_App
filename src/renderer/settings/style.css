@@ -158,6 +158,42 @@ input[type="color"]::-webkit-color-swatch {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+.text-input,
+.select-input {
+    width: 100%;
+    padding: 8px 10px;
+    color: #f3f4f6;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    outline: none;
+    font: inherit;
+}
+
+.text-input:focus,
+.select-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+}
+
+.select-input option,
+.select-input optgroup {
+    color: #111827;
+    background: #ffffff;
+}
+
+.font-status,
+.font-license-note {
+    margin-top: 8px;
+    color: #9ca3af;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.font-status {
+    color: #fbbf24;
+}
+
 /* Switch styling */
 .switch {
     position: relative;
@@ -457,4 +493,3 @@ input:checked + .slider:before {
 .btn-preset:active {
     transform: scale(0.96);
 }
-

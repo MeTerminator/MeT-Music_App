@@ -5,6 +5,10 @@ createApp({
         const config = ref({
             fontSize: 36,
             transFontSize: 18,
+            lyricFontFamily: '',
+            translationFontFamily: '',
+            lyricFontWeight: 700,
+            translationFontWeight: 400,
             textColor: '#ffffff',
             colorActive: '#ffffff',
             colorInactive: 'rgba(255, 255, 255, 0.3)',
@@ -14,7 +18,7 @@ createApp({
             bgBlur: 10,
             useThemeColorForActive: true,
             textOpacity: 100,
-            strokeWidth: 1,
+            strokeWidth: 0,
             strokeColor: '#000000',
             overallOpacity: 90,
             transFontSizeScale: 23,
@@ -24,6 +28,30 @@ createApp({
         const inactiveColorHex = ref('#ffffff');
         const inactiveOpacity = ref(30);
         const bgColorHex = ref('#000000');
+        const systemFonts = ref([]);
+        const fontLoadError = ref('');
+        const featuredFonts = [
+            { label: 'Spotify Mix（内置）', value: 'Spotify Mix UI Title' },
+            { label: 'HarmonyOS Sans SC（内置）', value: 'HarmonyOS Sans SC' },
+            { label: 'SF Pro（内置）', value: 'MeT SF Pro' },
+            { label: 'PingFang SC（内置）', value: 'MeT PingFang SC' }
+        ];
+
+        const loadSystemFonts = async () => {
+            if (typeof window.queryLocalFonts !== 'function') {
+                fontLoadError.value = '当前系统不支持读取字体列表，仍可使用内置与推荐字体。';
+                return;
+            }
+
+            try {
+                const fontData = await window.queryLocalFonts();
+                systemFonts.value = [...new Set(fontData.map(font => font.family).filter(Boolean))]
+                    .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+            } catch (error) {
+                console.error('Failed to query local fonts:', error);
+                fontLoadError.value = '无法读取系统字体列表，请检查本地字体访问权限。';
+            }
+        };
 
         // Screen & Window Bounds State for Position Control
         const screenSize = ref({ width: 1920, height: 1080 });
@@ -36,6 +64,7 @@ createApp({
         const moveStep = ref(10);
         const padRef = ref(null);
         const isPadDragging = ref(false);
+        let configUpdateTimer = null;
 
         // Computed style for drag pad indicator handle
         const padHandleStyle = computed(() => {
@@ -64,6 +93,26 @@ createApp({
 
         const onCoordInputChange = () => {
             updatePosition(windowX.value, windowY.value);
+        };
+
+        const updateWindowSize = () => {
+            const maxWidth = Math.max(100, screenSize.value.width);
+            const maxHeight = Math.max(50, screenSize.value.height);
+            windowWidth.value = Math.max(100, Math.min(maxWidth, Math.round(Number(windowWidth.value) || 100)));
+            windowHeight.value = Math.max(50, Math.min(maxHeight, Math.round(Number(windowHeight.value) || 50)));
+
+            const maxX = Math.max(0, screenSize.value.width - windowWidth.value);
+            const maxY = Math.max(0, screenSize.value.height - windowHeight.value);
+            windowX.value = Math.max(0, Math.min(maxX, windowX.value));
+            windowY.value = Math.max(0, Math.min(maxY, windowY.value));
+
+            window.electron.ipcRenderer.send(
+                "resize-window",
+                windowX.value,
+                windowY.value,
+                windowWidth.value,
+                windowHeight.value
+            );
         };
 
         const moveOffset = (deltaX, deltaY) => {
@@ -137,8 +186,20 @@ createApp({
             window.electron.ipcRenderer.send("close-settings-window");
         };
 
-        const updateConfig = () => {
+        const sendConfigUpdate = () => {
+            configUpdateTimer = null;
             window.electron.ipcRenderer.send("update-lyric-config", JSON.parse(JSON.stringify(config.value)));
+        };
+
+        const updateConfig = () => {
+            clearTimeout(configUpdateTimer);
+            configUpdateTimer = setTimeout(sendConfigUpdate, 80);
+        };
+
+        const flushConfigUpdate = () => {
+            if (configUpdateTimer === null) return;
+            clearTimeout(configUpdateTimer);
+            sendConfigUpdate();
         };
 
         const updateInactiveColor = () => {
@@ -201,6 +262,10 @@ createApp({
             config.value = {
                 fontSize: 36,
                 transFontSize: 18,
+                lyricFontFamily: '',
+                translationFontFamily: '',
+                lyricFontWeight: 700,
+                translationFontWeight: 400,
                 textColor: '#ffffff',
                 colorActive: '#ffffff',
                 colorInactive: 'rgba(255, 255, 255, 0.3)',
@@ -210,7 +275,7 @@ createApp({
                 bgBlur: 10,
                 useThemeColorForActive: true,
                 textOpacity: 100,
-                strokeWidth: 1,
+                strokeWidth: 0,
                 strokeColor: '#000000',
                 overallOpacity: 90,
                 transFontSizeScale: 23,
@@ -232,6 +297,8 @@ createApp({
                 config.value = { ...config.value, ...currentConfig };
                 parseConfigColors();
             }
+
+            loadSystemFonts();
 
             try {
                 const screen = await window.electron.ipcRenderer.invoke("get-screen-size");
@@ -258,8 +325,13 @@ createApp({
             });
         });
 
+        onUnmounted(flushConfigUpdate);
+
         return {
             config,
+            systemFonts,
+            featuredFonts,
+            fontLoadError,
             inactiveColorHex,
             inactiveOpacity,
             bgColorHex,
@@ -273,6 +345,7 @@ createApp({
             padHandleStyle,
             updatePosition,
             onCoordInputChange,
+            updateWindowSize,
             moveOffset,
             alignPosition,
             onPadMouseDown,

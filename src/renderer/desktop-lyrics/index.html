@@ -6,6 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MeT-Music 桌面歌词</title>
+    <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -83,7 +84,7 @@
         <main id="lyric-content" ref="mainRef">
             <div id="lyric-text-container" ref="containerRef">
                 <transition name="lyric-scroll">
-                    <div :key="lyricText" class="lyric-wrapper">
+                    <div :key="lyricLineKey" class="lyric-wrapper">
                         <!-- KTV line -->
                         <div v-if="lyricData && lyricData.length > 0" ref="lineRef" class="ktv-line" :style="ktvStyle">
                             <span v-for="(word, index) in lyricData" :key="index" class="ktv-word" :data-item="index">
@@ -100,7 +101,7 @@
             
             <div id="lyric-tran-container" v-if="config.showTranslation && lyricTrans">
                 <transition name="lyric-scroll">
-                    <div :key="lyricTrans" class="lyric-tran-wrapper">
+                    <div :key="lyricLineKey" class="lyric-tran-wrapper">
                         <div id="lyric-tran">
                             {{ lyricTrans }}
                         </div>
