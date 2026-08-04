@@ -80,6 +80,27 @@ body {
     cursor: grabbing;
 }
 
+/*
+ * Wayland does not allow clients to move top-level windows with setPosition(),
+ * nor does it expose global pointer/window coordinates. Mark the visible lyric
+ * surface as a native drag region so the compositor can perform the move.
+ */
+body.wayland-native #app,
+body.wayland-native #app .drag-area,
+body.wayland-native #app header,
+body.wayland-native #app main {
+    -webkit-app-region: drag !important;
+}
+
+body.wayland-native #app .item {
+    -webkit-app-region: no-drag !important;
+}
+
+body.wayland-native #app.lock-lyric,
+body.wayland-native #app.lock-lyric * {
+    -webkit-app-region: no-drag !important;
+}
+
 /* ---------------------------------------------------- */
 /* 2. 边框/拉伸把手 (用于拉伸窗口) */
 /* ---------------------------------------------------- */
@@ -92,6 +113,14 @@ body {
     transition: opacity 0.3s;
     -webkit-app-region: no-drag !important;
     pointer-events: auto !important;
+}
+
+/* Frameless Electron windows have native extended resize boundaries on Wayland.
+ * Custom in-page handles would intercept those boundaries and then attempt the
+ * forbidden programmatic setBounds() path, so leave the edges to the compositor. */
+body.wayland-native .resize-handle {
+    display: none;
+    pointer-events: none !important;
 }
 
 #app:hover .resize-handle {

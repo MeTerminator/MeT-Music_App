@@ -12,7 +12,49 @@ const DEFAULT_LYRIC_WIDTH = 1200;
 const DEFAULT_LYRIC_HEIGHT = 130;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
-let isResizing = false;
+let saveLyricBoundsTimer = null;
+
+function isWaylandSession() {
+    const ozoneArgument = process.argv.find(argument =>
+        argument.startsWith('--ozone-platform=') ||
+        argument.startsWith('--ozone-platform-hint=')
+    );
+    const explicitOzonePlatform = (
+        ozoneArgument?.split('=')[1] ||
+        process.env.ELECTRON_OZONE_PLATFORM_HINT ||
+        process.env.OZONE_PLATFORM ||
+        ''
+    ).toLowerCase();
+
+    if (explicitOzonePlatform === 'x11') return false;
+    if (explicitOzonePlatform === 'wayland') return true;
+
+    return process.platform === 'linux' && (
+        Boolean(process.env.WAYLAND_DISPLAY) ||
+        String(process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland'
+    );
+}
+
+function scheduleLyricBoundsSave() {
+    clearTimeout(saveLyricBoundsTimer);
+    saveLyricBoundsTimer = setTimeout(() => {
+        if (!lyricWindow || lyricWindow.isDestroyed()) return;
+
+        const bounds = lyricWindow.getBounds();
+        const currentConfig = config.getConfig();
+        currentConfig.windowWidth = bounds.width;
+        currentConfig.windowHeight = bounds.height;
+
+        // Wayland deliberately hides global window coordinates (they are always 0,0).
+        // Keep the last meaningful coordinates instead of overwriting them.
+        if (!isWaylandSession()) {
+            currentConfig.windowX = bounds.x;
+            currentConfig.windowY = bounds.y;
+        }
+
+        config.saveConfig(currentConfig);
+    }, 250);
+}
 
 function getScreenWidth() {
     const cursor = screen.getCursorScreenPoint();
@@ -179,6 +221,8 @@ function createLyricWindow() {
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: true,
+        minWidth: 100,
+        minHeight: 50,
         show: true,
         maximizable: false,
         icon: path.join(__dirname, "..", "..", "public", "icons", "icon.png"),
@@ -205,13 +249,14 @@ function createLyricWindow() {
     lyricWindow.on('show', () => { lyricWindowVisible = true; });
 
     lyricWindow.on('resize', () => {
-        if (lyricWindow && !isResizing) {
-            const [actualWidth, actualHeight] = lyricWindow.getSize();
-            if (actualWidth !== currentLyricWidth || actualHeight !== currentLyricHeight) {
-                lyricWindow.setSize(currentLyricWidth, currentLyricHeight);
-            }
-        }
+        if (!lyricWindow) return;
+
+        // Native edge resizing is required on Wayland: the compositor, rather than
+        // JavaScript, owns the interactive resize operation.
+        [currentLyricWidth, currentLyricHeight] = lyricWindow.getSize();
+        lyricWindow.webContents.send('window-resized', currentLyricWidth, currentLyricHeight);
         notifyBoundsChanged();
+        scheduleLyricBoundsSave();
     });
 
     lyricWindow.on('move', () => {
@@ -271,7 +316,6 @@ function moveLyricWindow(newX, newY) {
 function resizeLyricWindow(x, y, width, height) {
     if (!lyricWindow) return;
 
-    isResizing = true;
     currentLyricWidth = Math.floor(width);
     currentLyricHeight = Math.floor(height);
 
@@ -285,10 +329,6 @@ function resizeLyricWindow(x, y, width, height) {
     // Notify renderer of the updated size
     lyricWindow.webContents.send('window-resized', currentLyricWidth, currentLyricHeight);
     notifyBoundsChanged();
-
-    setTimeout(() => {
-        isResizing = false;
-    }, 100);
 }
 
 module.exports = {
@@ -311,5 +351,6 @@ module.exports = {
     moveLyricWindow,
     resizeLyricWindow,
     setLyricWindowLock,
+    isWaylandSession,
     getScreenWidth
 };

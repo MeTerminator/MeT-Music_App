@@ -296,6 +296,9 @@ createApp({
 
         // IPC Listeners
         const setupIPC = async () => {
+            const windowSystem = await window.electron.ipcRenderer.invoke("get-window-system");
+            document.body.classList.toggle("wayland-native", Boolean(windowSystem?.isWayland));
+
             const initialConfig = await window.electron.ipcRenderer.invoke("get-lyric-config");
             if (initialConfig) {
                 config.value = { ...config.value, ...initialConfig };

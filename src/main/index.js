@@ -66,6 +66,10 @@ function setupIPC() {
         return lyricWindow.getBounds();
     });
 
+    ipcMain.handle('get-window-system', () => ({
+        isWayland: windowManager.isWaylandSession()
+    }));
+
     ipcMain.on('toggle-desktop-lyric-lock', (_event, isLock) => {
         const currentConfig = config.getConfig();
         currentConfig.isLock = isLock;
