@@ -20,26 +20,25 @@
 
 ### 1. 环境准备
 
-确保你的计算机上已安装 [Node.js](https://nodejs.org/) (建议使用 LTS 版本)。
+确保已安装 [Node.js](https://nodejs.org/) LTS 和 [pnpm](https://pnpm.io/)。
 
 ### 2. 克隆项目
 
 ```bash
 git clone https://github.com/MeTerminator/MeT-Music_App.git
 cd MeT-Music_App
-
 ```
 
 ### 3. 安装依赖
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 4. 启动开发模式
 
 ```bash
-npm run start
+pnpm start
 ```
 
 ## 主要功能
@@ -65,7 +64,7 @@ npm run start
 执行以下命令将应用打包为可执行文件：
 
 ```bash
-npm run make
+pnpm dist
 ```
 
 打包后的文件将存放在 `dist` 目录中。

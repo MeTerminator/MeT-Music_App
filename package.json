@@ -22,12 +22,12 @@
     },
     "homepage": "https://met6.top/music/",
     "license": "MIT",
-    "packageManager": "pnpm@11.15.1",
+    "packageManager": "pnpm@11.21.0",
     "devDependencies": {
-        "electron": "^43.2.0",
+        "electron": "^43.4.1",
         "electron-builder": "^26.15.3"
     },
     "dependencies": {
-        "vue": "^3.5.38"
+        "vue": "^3.5.41"
     }
 }
