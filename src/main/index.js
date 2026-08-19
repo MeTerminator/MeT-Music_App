@@ -2,6 +2,7 @@ const { app, ipcMain, screen } = require('electron');
 const config = require('./config');
 const windowManager = require('./windowManager');
 const trayManager = require('./trayManager');
+const mediaManager = require('./mediaManager');
 
 try {
     if (require('electron-squirrel-startup')) app.quit();
@@ -13,6 +14,8 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
 }
+
+mediaManager.setupAppIdentity();
 
 let currentSong = {
     songName: '',
@@ -74,6 +77,7 @@ function setupIPC() {
         const lyricWindow = windowManager.getLyricWindow();
 
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
+        mediaManager.update(currentSong);
 
         if (lyricWindow && !lyricWindow.isDestroyed()) {
             const songLabel = `${currentSong.songName} - ${currentSong.songArtist}`;
@@ -200,16 +204,24 @@ function setupIPC() {
     ipcMain.on('play-or-pause', () => { playOrPause(); });
 }
 
+function runPlayerCommand(name) {
+    const mainWindow = windowManager.getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents
+        .executeJavaScript(`typeof window.${name} === "function" && window.${name}();`)
+        .catch(() => {});
+}
+
 function playPrev() {
-    windowManager.getMainWindow()?.webContents.executeJavaScript(`window.$MeTMusic_prev();`);
+    runPlayerCommand('$MeTMusic_prev');
 }
 
 function playNext() {
-    windowManager.getMainWindow()?.webContents.executeJavaScript(`window.$MeTMusic_next();`);
+    runPlayerCommand('$MeTMusic_next');
 }
 
 function playOrPause() {
-    windowManager.getMainWindow()?.webContents.executeJavaScript(`window.$MeTMusic_playOrPause();`);
+    runPlayerCommand('$MeTMusic_playOrPause');
 }
 
 function showMainWindow() {
@@ -230,6 +242,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
     windowManager.setQuitting(true);
+    mediaManager.destroy();
     trayManager.destroyTray();
 });
 
@@ -238,5 +251,11 @@ app.whenReady().then(() => {
     windowManager.createMainWindow();
     windowManager.createLyricWindow();
     trayManager.createTray(playPrev, playNext, playOrPause);
+    mediaManager.create({
+        playPrev,
+        playNext,
+        playOrPause,
+        showWindow: showMainWindow
+    });
     setupIPC();
 });
