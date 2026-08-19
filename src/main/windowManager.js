@@ -78,10 +78,13 @@ function createMainWindow() {
         webPreferences: {
             preload: path.join(__dirname, "..", "preload", "preload.js"),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            // Keep Media Session / audio alive after hide-to-tray.
+            backgroundThrottling: false
         }
     });
 
+    mainWindow.webContents.setBackgroundThrottling(false);
     mainWindow.loadURL("https://music.met6.top:444/app/");
 
     mainWindow.on("close", (e) => {
