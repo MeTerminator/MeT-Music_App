@@ -4,3 +4,5 @@ allowBuilds:
 ignoredBuiltDependencies:
   - electron
   - electron-winstaller
+minimumReleaseAgeExclude:
+  - electron@43.4.1
