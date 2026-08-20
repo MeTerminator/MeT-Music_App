@@ -1,24 +1,38 @@
-const { app, Menu, nativeImage, powerSaveBlocker } = require('electron');
-const zlib = require('zlib');
-const windowManager = require('./windowManager');
+import { app, Menu, nativeImage, powerSaveBlocker, type BrowserWindow, type NativeImage } from "electron";
+import zlib from "node:zlib";
+import * as windowManager from "./window-manager";
 
 // System media chrome is driven by the renderer's Media Session API.
 // Do not also register globalShortcut for MediaPlayPause/Next/Previous:
 // Chromium already routes those keys to the active session, and a second
 // registration would double-fire (and steal keys from other players on macOS).
 
-const ICON_SIZE = 20;
-let controls = null;
-let lastThumbarPlaying = null;
-let lastDockPlaying = null;
-let lastProgressKey = '';
-let powerSaveId = null;
+export interface MediaControls {
+    playPrev(): void;
+    playNext(): void;
+    playOrPause(): void;
+    showWindow(): void;
+}
 
-function crc32(buffer) {
+/** 媒体集成关心的播放状态子集(index.ts 传入完整 HookPayload 亦可) */
+interface MediaSong {
+    duration?: number;
+    currentTime?: number;
+    isPlaying?: boolean;
+}
+
+const ICON_SIZE = 20;
+let controls: MediaControls | null = null;
+let lastThumbarPlaying: boolean | null = null;
+let lastDockPlaying: boolean | null = null;
+let lastProgressKey = "";
+let powerSaveId: number | null = null;
+
+function crc32(buffer: Buffer): number {
     return zlib.crc32(buffer);
 }
 
-function pngChunk(type, data) {
+function pngChunk(type: string, data: Buffer): Buffer {
     const typeBuf = Buffer.from(type);
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length, 0);
@@ -27,7 +41,7 @@ function pngChunk(type, data) {
     return Buffer.concat([length, typeBuf, data, crc]);
 }
 
-function encodePng(width, height, rgba) {
+function encodePng(width: number, height: number, rgba: Buffer): Buffer {
     const stride = width * 4 + 1;
     const raw = Buffer.alloc(stride * height);
     for (let y = 0; y < height; y += 1) {
@@ -43,13 +57,18 @@ function encodePng(width, height, rgba) {
 
     return Buffer.concat([
         Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-        pngChunk('IHDR', ihdr),
-        pngChunk('IDAT', zlib.deflateSync(raw)),
-        pngChunk('IEND', Buffer.alloc(0))
+        pngChunk("IHDR", ihdr),
+        pngChunk("IDAT", zlib.deflateSync(raw)),
+        pngChunk("IEND", Buffer.alloc(0))
     ]);
 }
 
-function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
+function inTriangle(
+    px: number, py: number,
+    ax: number, ay: number,
+    bx: number, by: number,
+    cx: number, cy: number
+): boolean {
     const v0x = cx - ax;
     const v0y = cy - ay;
     const v1x = bx - ax;
@@ -68,7 +87,7 @@ function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
     return u >= 0 && v >= 0 && u + v <= 1;
 }
 
-function fillRect(rgba, x0, y0, x1, y1) {
+function fillRect(rgba: Buffer, x0: number, y0: number, x1: number, y1: number): void {
     for (let y = y0; y < y1; y += 1) {
         for (let x = x0; x < x1; x += 1) {
             const i = (y * ICON_SIZE + x) * 4;
@@ -80,7 +99,9 @@ function fillRect(rgba, x0, y0, x1, y1) {
     }
 }
 
-function fillTriangle(rgba, a, b, c) {
+type Point = [number, number];
+
+function fillTriangle(rgba: Buffer, a: Point, b: Point, c: Point): void {
     for (let y = 0; y < ICON_SIZE; y += 1) {
         for (let x = 0; x < ICON_SIZE; x += 1) {
             if (!inTriangle(x + 0.5, y + 0.5, a[0], a[1], b[0], b[1], c[0], c[1])) continue;
@@ -93,7 +114,7 @@ function fillTriangle(rgba, a, b, c) {
     }
 }
 
-function iconFromDraw(draw) {
+function iconFromDraw(draw: (rgba: Buffer) => void): NativeImage {
     const rgba = Buffer.alloc(ICON_SIZE * ICON_SIZE * 4);
     draw(rgba);
     return nativeImage.createFromBuffer(encodePng(ICON_SIZE, ICON_SIZE, rgba));
@@ -115,13 +136,13 @@ const icons = {
     })
 };
 
-function getMainWindow() {
+function getMainWindow(): BrowserWindow | null {
     return windowManager.getMainWindow();
 }
 
-function setPowerSave(isPlaying) {
+function setPowerSave(isPlaying: boolean): void {
     if (isPlaying && powerSaveId == null) {
-        powerSaveId = powerSaveBlocker.start('prevent-app-suspension');
+        powerSaveId = powerSaveBlocker.start("prevent-app-suspension");
         return;
     }
     if (!isPlaying && powerSaveId != null) {
@@ -130,21 +151,21 @@ function setPowerSave(isPlaying) {
     }
 }
 
-function updateProgressBar(win, song) {
+function updateProgressBar(win: BrowserWindow, song: MediaSong | null | undefined): void {
     const duration = Number(song?.duration) || 0;
     const currentTime = Number(song?.currentTime) || 0;
     const isPlaying = Boolean(song?.isPlaying);
 
     if (!duration) {
-        if (lastProgressKey !== 'off') {
+        if (lastProgressKey !== "off") {
             win.setProgressBar(-1);
-            lastProgressKey = 'off';
+            lastProgressKey = "off";
         }
         return;
     }
 
     const ratio = Math.min(1, Math.max(0, currentTime / duration));
-    const mode = isPlaying ? 'normal' : 'paused';
+    const mode: "normal" | "paused" = isPlaying ? "normal" : "paused";
     const key = `${mode}:${ratio.toFixed(2)}`;
     if (key === lastProgressKey) return;
 
@@ -152,47 +173,47 @@ function updateProgressBar(win, song) {
     win.setProgressBar(ratio, { mode });
 }
 
-function updateThumbar(win, song) {
-    if (process.platform !== 'win32' || typeof win.setThumbarButtons !== 'function') return;
+function updateThumbar(win: BrowserWindow, song: MediaSong | null | undefined): void {
+    if (process.platform !== "win32" || typeof win.setThumbarButtons !== "function") return;
 
     const isPlaying = Boolean(song?.isPlaying);
     if (lastThumbarPlaying === isPlaying) return;
     lastThumbarPlaying = isPlaying;
 
     win.setThumbarButtons([
-        { tooltip: '上一首', icon: icons.prev, click: () => controls?.playPrev() },
+        { tooltip: "上一首", icon: icons.prev, click: () => controls?.playPrev() },
         {
-            tooltip: isPlaying ? '暂停' : '播放',
+            tooltip: isPlaying ? "暂停" : "播放",
             icon: isPlaying ? icons.pause : icons.play,
             click: () => controls?.playOrPause()
         },
-        { tooltip: '下一首', icon: icons.next, click: () => controls?.playNext() }
+        { tooltip: "下一首", icon: icons.next, click: () => controls?.playNext() }
     ]);
 }
 
-function updateDockMenu(song) {
-    if (process.platform !== 'darwin' || !app.dock) return;
+function updateDockMenu(song: MediaSong | null | undefined): void {
+    if (process.platform !== "darwin" || !app.dock) return;
 
     const isPlaying = Boolean(song?.isPlaying);
     if (lastDockPlaying === isPlaying) return;
     lastDockPlaying = isPlaying;
 
     app.dock.setMenu(Menu.buildFromTemplate([
-        { label: isPlaying ? '暂停' : '播放', click: () => controls?.playOrPause() },
-        { label: '上一首', click: () => controls?.playPrev() },
-        { label: '下一首', click: () => controls?.playNext() },
-        { type: 'separator' },
-        { label: '显示主界面', click: () => controls?.showWindow() }
+        { label: isPlaying ? "暂停" : "播放", click: () => controls?.playOrPause() },
+        { label: "上一首", click: () => controls?.playPrev() },
+        { label: "下一首", click: () => controls?.playNext() },
+        { type: "separator" },
+        { label: "显示主界面", click: () => controls?.showWindow() }
     ]));
 }
 
-function setupAppIdentity() {
-    if (process.platform === 'win32') {
-        app.setAppUserModelId('top.met6.musicq');
+export function setupAppIdentity(): void {
+    if (process.platform === "win32") {
+        app.setAppUserModelId("top.met6.musicq");
     }
 }
 
-function create(playerControls) {
+export function create(playerControls: MediaControls): void {
     controls = playerControls;
     updateDockMenu({ isPlaying: false });
 
@@ -202,7 +223,7 @@ function create(playerControls) {
     }
 }
 
-function update(song) {
+export function update(song: MediaSong): void {
     const win = getMainWindow();
     if (!win || win.isDestroyed()) return;
 
@@ -212,17 +233,10 @@ function update(song) {
     setPowerSave(Boolean(song?.isPlaying));
 }
 
-function destroy() {
+export function destroy(): void {
     setPowerSave(false);
     lastThumbarPlaying = null;
     lastDockPlaying = null;
-    lastProgressKey = '';
+    lastProgressKey = "";
     controls = null;
 }
-
-module.exports = {
-    setupAppIdentity,
-    create,
-    update,
-    destroy
-};

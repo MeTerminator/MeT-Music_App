@@ -31,6 +31,11 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+#root {
+    width: 100%;
+    height: 100vh;
+}
+
 #app {
     position: relative;
     display: flex;
@@ -85,9 +90,8 @@ body {
 }
 
 /*
- * Wayland does not allow clients to move top-level windows with setPosition(),
- * nor does it expose global pointer/window coordinates. Mark the visible lyric
- * surface as a native drag region so the compositor can perform the move.
+ * Wayland 不允许客户端用 setPosition() 移动顶层窗口,也不暴露全局指针/窗口坐标。
+ * 将可见歌词面标记为原生拖拽区域,由合成器完成移动。
  */
 body.wayland-native #app,
 body.wayland-native #app .drag-area,
@@ -119,9 +123,9 @@ body.wayland-native #app.lock-lyric * {
     pointer-events: auto !important;
 }
 
-/* Frameless Electron windows have native extended resize boundaries on Wayland.
- * Custom in-page handles would intercept those boundaries and then attempt the
- * forbidden programmatic setBounds() path, so leave the edges to the compositor. */
+/* Wayland 下无边框 Electron 窗口自带原生扩展 resize 边界。
+ * 页面内自绘把手会拦截这些边界并走被禁止的 setBounds() 路径,
+ * 因此边缘交给合成器处理。 */
 body.wayland-native .resize-handle {
     display: none;
     pointer-events: none !important;
@@ -209,7 +213,7 @@ body.wayland-native .resize-handle {
     cursor: nwse-resize;
 }
 
-/* 锁定歌词状态 */
+/* 锁定歌词状态:窗口整体穿透(主进程 setIgnoreMouseEvents + forward) */
 #app.lock-lyric {
     cursor: none;
     pointer-events: none;
@@ -226,6 +230,23 @@ body.wayland-native .resize-handle {
         background-color: transparent !important;
         backdrop-filter: blur(0) !important;
     }
+}
+
+/* 锁定态悬停:仅显示解锁按钮,且仅解锁按钮可点
+ * (主进程 forward 鼠标事件使 hover 生效) */
+#app.lock-lyric:hover header .tools {
+    opacity: 1;
+}
+
+#app.lock-lyric header .tools .item,
+#app.lock-lyric header .tools .song-label {
+    visibility: hidden;
+}
+
+#app.lock-lyric header .tools .item.item-lock {
+    visibility: visible;
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 header {
@@ -269,16 +290,25 @@ header {
                     height: 16px;
                 }
             }
+
+            /* 当前歌曲「歌名 - 歌手」,随工具条悬停显示 */
+            .song-label {
+                max-width: 30vw;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 12px;
+                line-height: 20px;
+                opacity: 0.85;
+                color: var(--main-color);
+                pointer-events: none;
+            }
         }
     }
 }
 
 #app:hover header .tools {
     opacity: 1;
-}
-
-#app.lock-lyric:hover header .tools {
-    opacity: 0;
 }
 
 main {
@@ -384,29 +414,37 @@ main {
 }
 
 /* ---------------------------------------------------- */
-/* Vue Slide-up Step Transition Animations */
+/* 行切换上滑过渡(对应旧 Vue lyric-scroll transition) */
 /* ---------------------------------------------------- */
-.lyric-scroll-enter-active,
-.lyric-scroll-leave-active {
-  transition: all 0.4s cubic-bezier(0.55, 0, 0.1, 1);
+@keyframes lyric-scroll-in {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
 }
 
-.lyric-scroll-leave-to {
-  transform: translateY(-100%);
+@keyframes lyric-scroll-out {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-100%);
+    }
 }
 
-.lyric-scroll-enter-from {
-  transform: translateY(100%);
+.lyric-scroll-enter {
+    animation: lyric-scroll-in 0.4s cubic-bezier(0.55, 0, 0.1, 1);
 }
 
-.lyric-scroll-leave-active {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  white-space: nowrap;
-}
-
-.hidden {
-    display: none !important;
+.lyric-scroll-leave {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    white-space: nowrap;
+    animation: lyric-scroll-out 0.4s cubic-bezier(0.55, 0, 0.1, 1) forwards;
 }
