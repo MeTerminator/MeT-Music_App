@@ -17,6 +17,7 @@ import * as config from "./config";
 import * as windowManager from "./window-manager";
 import * as trayManager from "./tray-manager";
 import * as mediaManager from "./media-manager";
+import * as updater from "./updater";
 
 try {
     const nodeRequire = createRequire(__filename);
@@ -329,4 +330,5 @@ app.whenReady().then(() => {
         showWindow: showMainWindow
     });
     setupIPC();
+    updater.initUpdater();
 });

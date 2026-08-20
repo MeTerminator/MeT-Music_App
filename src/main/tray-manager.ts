@@ -3,6 +3,7 @@ import path from "node:path";
 import { CH } from "../shared/ipc";
 import * as config from "./config";
 import * as windowManager from "./window-manager";
+import { checkForUpdatesManually } from "./updater";
 
 type PlayerAction = () => void;
 
@@ -175,6 +176,13 @@ export function updateTrayMenu(
         label: "打开设置",
         click: () => {
             windowManager.createSettingsWindow();
+        }
+    });
+    template.push({
+        label: "检查更新",
+        click: () => {
+            // dev 模式下 updater 内部会弹「开发模式下不可用」提示
+            void checkForUpdatesManually();
         }
     });
     template.push({ type: "separator" });
