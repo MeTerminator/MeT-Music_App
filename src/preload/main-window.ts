@@ -1,24 +1,21 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-// 注意:仅 type-only 引用契约。preload 在沙箱中运行,不能在运行时 require 被
-// externalize 的依赖(ipc.ts 顶层引入 zod),因此通道字符串在此以字面量书写,
-// 并用 `satisfies typeof CH[...]` 钉死在 src/shared/ipc.ts 的契约上(漂移即编译失败)。
-import type { CH, MainWindowAPI, WindowControl } from "../shared/ipc";
+// 通道名来自零依赖的 channels.ts(运行时安全,打包时内联);
+// 契约类型(含 zod 的 ipc.ts)仅 type-only 引用。
+import { CH } from "../shared/channels";
+import type { MainWindowAPI, WindowControl } from "../shared/ipc";
 import type { HookPayload } from "../shared/hook-contract";
 
-type Ch = typeof CH;
-
-const HOOK_STATE = "hook:state" satisfies Ch["hookState"];
-const WINDOW_CONTROL = "window:control" satisfies Ch["windowControl"];
-
 const api: MainWindowAPI = {
-    sendHookData: (data: HookPayload) => ipcRenderer.send(HOOK_STATE, data),
-    hideWindow: () => ipcRenderer.send(WINDOW_CONTROL, { action: "hide-main" } satisfies WindowControl),
-    openSettings: () => ipcRenderer.send(WINDOW_CONTROL, { action: "open-settings" } satisfies WindowControl)
+    sendHookData: (data: HookPayload) => ipcRenderer.send(CH.hookState, data),
+    hideWindow: () => ipcRenderer.send(CH.windowControl, { action: "hide-main" } satisfies WindowControl),
+    openSettings: () => ipcRenderer.send(CH.windowControl, { action: "open-settings" } satisfies WindowControl)
 };
 
 contextBridge.exposeInMainWorld("electronAPI", api);
 
-// 兼容层:旧 UI 残留的 window.electron.ipcRenderer 调用防 ReferenceError(与旧 preload 相同)
+// 兼容层:v1 的裸 IPC 通道在 v2 已全部移除,此透传仅防旧 UI 残留的
+// window.electron.ipcRenderer 调用抛 ReferenceError —— send 到 v1 通道会静默无操作
+// (main 侧无监听),invoke 会因无 handler 而 reject。
 contextBridge.exposeInMainWorld("electron", {
     ipcRenderer: {
         send: (channel: string, ...args: unknown[]) => ipcRenderer.send(channel, ...args),

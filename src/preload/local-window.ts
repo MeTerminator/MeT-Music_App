@@ -1,10 +1,9 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-// 注意:仅 type-only 引用契约。preload 在沙箱中运行,不能在运行时 require 被
-// externalize 的依赖(ipc.ts 顶层引入 zod),因此通道字符串在此以字面量书写,
-// 并用 `satisfies Partial<typeof CH>` 钉死在 src/shared/ipc.ts 的契约上(漂移即编译失败)。
+// 通道名来自零依赖的 channels.ts(运行时安全,打包时内联);
+// 契约类型(含 zod 的 ipc.ts)仅 type-only 引用。
+import { CH } from "../shared/channels";
 import type {
     AppInfo,
-    CH,
     DesktopAPI,
     LyricConfig,
     LyricLineEvent,
@@ -13,22 +12,6 @@ import type {
     Rect,
     WindowControl
 } from "../shared/ipc";
-
-const C = {
-    playerCommand: "player:command",
-    windowControl: "window:control",
-    lyricWindow: "lyric:window",
-    lyricConfigGet: "lyric:config-get",
-    lyricConfigSet: "lyric:config-set",
-    appInfo: "app:info",
-    lyricBoundsGet: "lyric:bounds-get",
-    evLyricChange: "lyric:line-change",
-    evSongChange: "lyric:song-change",
-    evStatusChange: "lyric:status-change",
-    evConfigChanged: "lyric:config-changed",
-    evWindowResized: "lyric:window-resized",
-    evBoundsChanged: "lyric:bounds-changed"
-} as const satisfies Partial<typeof CH>;
 
 /** 订阅 main → 渲染进程事件,返回取消订阅函数 */
 function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
@@ -41,26 +24,26 @@ function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => voi
 
 const api: DesktopAPI = {
     // invoke
-    getAppInfo: () => ipcRenderer.invoke(C.appInfo) as Promise<AppInfo>,
-    getLyricBounds: () => ipcRenderer.invoke(C.lyricBoundsGet) as Promise<Rect>,
-    getLyricConfig: () => ipcRenderer.invoke(C.lyricConfigGet) as Promise<LyricConfig>,
+    getAppInfo: () => ipcRenderer.invoke(CH.appInfo) as Promise<AppInfo>,
+    getLyricBounds: () => ipcRenderer.invoke(CH.lyricBoundsGet) as Promise<Rect>,
+    getLyricConfig: () => ipcRenderer.invoke(CH.lyricConfigGet) as Promise<LyricConfig>,
 
     // send
     playerCommand: (action: PlayerCommand["action"]) =>
-        ipcRenderer.send(C.playerCommand, { action } satisfies PlayerCommand),
+        ipcRenderer.send(CH.playerCommand, { action } satisfies PlayerCommand),
     windowControl: (action: WindowControl["action"]) =>
-        ipcRenderer.send(C.windowControl, { action } satisfies WindowControl),
-    lyricWindow: (action: LyricWindowAction) => ipcRenderer.send(C.lyricWindow, action),
-    setLyricConfig: (config: Partial<LyricConfig>) => ipcRenderer.send(C.lyricConfigSet, config),
+        ipcRenderer.send(CH.windowControl, { action } satisfies WindowControl),
+    lyricWindow: (action: LyricWindowAction) => ipcRenderer.send(CH.lyricWindow, action),
+    setLyricConfig: (config: Partial<LyricConfig>) => ipcRenderer.send(CH.lyricConfigSet, config),
 
     // events
-    onLyricChange: (cb) => subscribe<[LyricLineEvent]>(C.evLyricChange, cb),
-    onSongChange: (cb) => subscribe<[string]>(C.evSongChange, cb),
-    onStatusChange: (cb) => subscribe<[boolean]>(C.evStatusChange, cb),
-    onConfigChanged: (cb) => subscribe<[LyricConfig]>(C.evConfigChanged, cb),
+    onLyricChange: (cb) => subscribe<[LyricLineEvent]>(CH.evLyricChange, cb),
+    onSongChange: (cb) => subscribe<[string]>(CH.evSongChange, cb),
+    onStatusChange: (cb) => subscribe<[boolean]>(CH.evStatusChange, cb),
+    onConfigChanged: (cb) => subscribe<[LyricConfig]>(CH.evConfigChanged, cb),
     // payload 为 [width, height](见 ipc.ts evWindowResized 注释)
-    onWindowResized: (cb) => subscribe<[[number, number]]>(C.evWindowResized, ([width, height]) => cb(width, height)),
-    onBoundsChanged: (cb) => subscribe<[Rect]>(C.evBoundsChanged, cb)
+    onWindowResized: (cb) => subscribe<[[number, number]]>(CH.evWindowResized, ([width, height]) => cb(width, height)),
+    onBoundsChanged: (cb) => subscribe<[Rect]>(CH.evBoundsChanged, cb)
 };
 
 contextBridge.exposeInMainWorld("desktopAPI", api);

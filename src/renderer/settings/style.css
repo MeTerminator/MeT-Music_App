@@ -463,9 +463,17 @@ input:checked + .slider:before {
     box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
 }
 
+/* 隐藏原生步进箭头:数值调节以滑杆为主,输入框仅用于直接键入 */
+.num-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
 .num-input::-webkit-inner-spin-button,
 .num-input::-webkit-outer-spin-button {
-    opacity: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
 }
 
 .preset-btn-row {

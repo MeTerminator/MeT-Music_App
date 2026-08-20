@@ -101,6 +101,9 @@ export interface ToolbarProps {
     onPlayOrPause: () => void;
     onPlayNext: () => void;
     onToggleLock: () => void;
+    /** 锁定态穿透联动:hover 解锁按钮时临时关闭窗口穿透(见 App.tsx) */
+    onLockMouseEnter: () => void;
+    onLockMouseLeave: () => void;
     onClose: () => void;
 }
 
@@ -114,6 +117,8 @@ export function Toolbar({
     onPlayOrPause,
     onPlayNext,
     onToggleLock,
+    onLockMouseEnter,
+    onLockMouseLeave,
     onClose,
 }: ToolbarProps): JSX.Element {
     return (
@@ -146,7 +151,13 @@ export function Toolbar({
                 </div>
 
                 <div className="item-section">
-                    <div className="item item-lock" title={isLock ? "解锁" : "锁定"} onClick={onToggleLock}>
+                    <div
+                        className="item item-lock"
+                        title={isLock ? "解锁" : "锁定"}
+                        onClick={onToggleLock}
+                        onMouseEnter={onLockMouseEnter}
+                        onMouseLeave={onLockMouseLeave}
+                    >
                         {isLock ? LockedIcon : UnlockedIcon}
                     </div>
                     <div className="item" title="关闭" onClick={onClose}>

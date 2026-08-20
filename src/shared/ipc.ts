@@ -4,55 +4,27 @@
  * 旧实现的 ~25 个裸通道收敛为按域命名的类型化通道(迁移对照见各 schema 注释)。
  */
 import { z } from "zod";
-import { HookPayloadSchema, type HookPayload } from "./hook-contract";
+import {
+  CoverThemeSchema,
+  HookPayloadSchema,
+  WordProgressSchema,
+  type HookPayload,
+} from "./hook-contract";
 
 export { HookPayloadSchema, type HookPayload };
 
-/* ========== 通道名 ========== */
+/* ========== 通道名(定义在零依赖的 channels.ts,preload 运行时直接引用) ========== */
 
-export const CH = {
-  /** 主窗 preload → main:播放状态 hook 转发(旧 metmusic-hook) */
-  hookState: "hook:state",
-  /** 歌词/设置窗 → main:播放控制(旧 play-prev / play-next / play-or-pause) */
-  playerCommand: "player:command",
-  /** 窗口控制(旧 hide-window / show-window / open-settings / close-settings-window) */
-  windowControl: "window:control",
-  /** 歌词窗几何操作(旧 toggle-desktop-lyric-lock / hide-desktop-lyric-window /
-   *  move-window / update-lyric-position / resize-window /
-   *  save-lyric-window-bounds / reset-lyric-window-position) */
-  lyricWindow: "lyric:window",
-  /** invoke:歌词外观配置(旧 get-lyric-config) */
-  lyricConfigGet: "lyric:config-get",
-  /** send:保存歌词外观配置并广播(旧 update-lyric-config) */
-  lyricConfigSet: "lyric:config-set",
-  /** invoke:环境信息(旧 get-screen-size + get-window-system 合并) */
-  appInfo: "app:info",
-  /** invoke:歌词窗当前 bounds(旧 get-window-bounds) */
-  lyricBoundsGet: "lyric:bounds-get",
-
-  /* ---- main → 歌词/设置窗事件 ---- */
-  /** 歌词行更新(旧 play-lyric-change,≥50ms 合并后) */
-  evLyricChange: "lyric:line-change",
-  /** 歌名变更(旧 play-song-change,payload 为 "歌名 - 歌手") */
-  evSongChange: "lyric:song-change",
-  /** 播放状态变更(旧 play-status-change,payload 为 boolean) */
-  evStatusChange: "lyric:status-change",
-  /** 配置变更广播(旧 lyric-config-changed) */
-  evConfigChanged: "lyric:config-changed",
-  /** 歌词窗尺寸变化(旧 window-resized,payload 为 [width, height]) */
-  evWindowResized: "lyric:window-resized",
-  /** 歌词窗 bounds 变化 → 设置窗(旧 lyric-bounds-changed) */
-  evBoundsChanged: "lyric:bounds-changed",
-} as const;
-
-export type ChannelName = (typeof CH)[keyof typeof CH];
+export { CH, type ChannelName } from "./channels";
 
 /* ========== payload schema ========== */
 
 /** 桌面歌词外观配置(旧 config.js DEFAULT_CONFIG,字段与持久化文件
  *  userData/desktop-lyric-config.json 保持一致,老用户配置无损) */
 export const LyricConfigSchema = z.object({
+  /** 历史遗留,无运行时消费;保留仅为老配置文件字段无损往返 */
   fontSize: z.number().default(36),
+  /** 历史遗留,无运行时消费;保留仅为老配置文件字段无损往返 */
   transFontSize: z.number().default(18),
   lyricFontFamily: z.string().default(""),
   translationFontFamily: z.string().default(""),
@@ -110,22 +82,22 @@ export const LyricWindowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("resize"), x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
   /** 保存完整 bounds(旧 save-lyric-window-bounds) */
   z.object({ type: z.literal("save-bounds"), bounds: RectSchema }),
+  /** 拖动/缩放结束:main 自读 lyricWindow.getBounds() 落盘(渲染端无需回读 bounds) */
+  z.object({ type: z.literal("save-current-bounds") }),
+  /** 锁定态穿透联动:解锁按钮 hover 时临时关闭鼠标穿透(enabled=true 时按当前 isLock 重新应用) */
+  z.object({ type: z.literal("set-passthrough"), enabled: z.boolean() }),
   z.object({ type: z.literal("reset-position") }),
 ]);
 export type LyricWindowAction = z.infer<typeof LyricWindowActionSchema>;
 
 /** 歌词行事件 payload(main 按 ≥50ms 合并后发出;
- *  showTranslation=false 时 main 侧清空 lyricTrans,行为与旧实现一致) */
+ *  showTranslation=false 时 main 侧清空 lyricTrans,行为与旧实现一致;
+ *  lyricData / coverTheme 直接派生自 hook-contract,两端类型统一) */
 export const LyricLineEventSchema = z.object({
   lyricText: z.string(),
-  lyricData: z.array(z.object({ content: z.string(), percent: z.number() })),
+  lyricData: z.array(WordProgressSchema),
   lyricTrans: z.string(),
-  coverTheme: z
-    .object({
-      dark: z.record(z.string(), z.string().optional()).optional(),
-      light: z.record(z.string(), z.string().optional()).optional(),
-    })
-    .nullable(),
+  coverTheme: CoverThemeSchema.nullable(),
 });
 export type LyricLineEvent = z.infer<typeof LyricLineEventSchema>;
 

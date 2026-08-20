@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { defaultLyricConfig, type LyricConfig } from "@shared/ipc";
+import { hexToRgba, rgbToHex } from "@renderer/shared/color";
 import { FontSelect, NumberInput, Switch, type FeaturedFont } from "./components";
 
 /* ========== 常量 ========== */
@@ -36,32 +37,20 @@ function stripGeometry(config: LyricConfig): AppearanceConfig {
   return rest;
 }
 
-function hexChannel(value: number): string {
-  return value.toString(16).padStart(2, "0");
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  return [
-    parseInt(hex.slice(1, 3), 16),
-    parseInt(hex.slice(3, 5), 16),
-    parseInt(hex.slice(5, 7), 16),
-  ];
-}
-
 /** 解析 colorInactive → 颜色选择器 hex + 不透明度百分比(移植旧 parseConfigColors) */
 function parseInactiveColor(colorInactive: string): { hex: string; opacity: number } | null {
   if (colorInactive.startsWith("rgba")) {
     const match = colorInactive.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
     if (match) {
       return {
-        hex: `#${hexChannel(parseInt(match[1]!))}${hexChannel(parseInt(match[2]!))}${hexChannel(parseInt(match[3]!))}`,
+        hex: rgbToHex(parseInt(match[1]!), parseInt(match[2]!), parseInt(match[3]!)),
         opacity: Math.round(parseFloat(match[4]!) * 100),
       };
     }
     const matchRGB = colorInactive.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
     if (matchRGB) {
       return {
-        hex: `#${hexChannel(parseInt(matchRGB[1]!))}${hexChannel(parseInt(matchRGB[2]!))}${hexChannel(parseInt(matchRGB[3]!))}`,
+        hex: rgbToHex(parseInt(matchRGB[1]!), parseInt(matchRGB[2]!), parseInt(matchRGB[3]!)),
         opacity: 100,
       };
     }
@@ -78,7 +67,7 @@ function parseBgColor(bgColor: string): string | null {
   if (bgColor.startsWith("rgba")) {
     const parts = bgColor.match(/\d+/g);
     if (parts && parts.length >= 3) {
-      return `#${hexChannel(parseInt(parts[0]!))}${hexChannel(parseInt(parts[1]!))}${hexChannel(parseInt(parts[2]!))}`;
+      return rgbToHex(parseInt(parts[0]!), parseInt(parts[1]!), parseInt(parts[2]!));
     }
     return null;
   }
@@ -94,11 +83,9 @@ export default function App(): React.JSX.Element {
   /* ---- 外观配置状态 ---- */
   const [config, setConfig] = useState<LyricConfig>(defaultLyricConfig);
   const configRef = useRef(config);
-
-  // 颜色选择器派生状态(colorInactive / bgColor 是 rgba 字符串,需拆分)
-  const [inactiveColorHex, setInactiveColorHex] = useState("#ffffff");
-  const [inactiveOpacity, setInactiveOpacity] = useState(30);
-  const [bgColorHex, setBgColorHex] = useState("#000000");
+  // 初始 config 加载完成前禁用表单并丢弃 patch,避免用默认值覆盖持久化配置
+  const [loaded, setLoaded] = useState(false);
+  const loadedRef = useRef(false);
 
   /* ---- 字体 ---- */
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -117,10 +104,13 @@ export default function App(): React.JSX.Element {
   const padRef = useRef<HTMLDivElement>(null);
   const isPadDraggingRef = useRef(false);
 
-  /* ---- 配置提交(80ms 防抖,与旧实现一致) ---- */
+  /* ---- 配置提交(80ms 防抖,与旧实现一致;只提交防抖窗口内实际改动的字段) ---- */
   const configTimerRef = useRef<number | null>(null);
+  const pendingPatchRef = useRef<Partial<LyricConfig>>({});
 
   const patchConfig = useCallback((patch: Partial<LyricConfig>) => {
+    if (!loadedRef.current) return;
+    pendingPatchRef.current = { ...pendingPatchRef.current, ...patch };
     setConfig((prev) => {
       const next = { ...prev, ...patch };
       configRef.current = next;
@@ -129,7 +119,9 @@ export default function App(): React.JSX.Element {
     if (configTimerRef.current !== null) window.clearTimeout(configTimerRef.current);
     configTimerRef.current = window.setTimeout(() => {
       configTimerRef.current = null;
-      window.desktopAPI.setLyricConfig(stripGeometry(configRef.current));
+      const pending = pendingPatchRef.current;
+      pendingPatchRef.current = {};
+      if (Object.keys(pending).length > 0) window.desktopAPI.setLyricConfig(pending);
     }, 80);
   }, []);
 
@@ -139,39 +131,25 @@ export default function App(): React.JSX.Element {
       if (configTimerRef.current !== null) {
         window.clearTimeout(configTimerRef.current);
         configTimerRef.current = null;
-        window.desktopAPI.setLyricConfig(stripGeometry(configRef.current));
       }
+      const pending = pendingPatchRef.current;
+      pendingPatchRef.current = {};
+      if (Object.keys(pending).length > 0) window.desktopAPI.setLyricConfig(pending);
     };
   }, []);
 
-  const applyDerivedColors = useCallback((next: LyricConfig) => {
-    const inactive = parseInactiveColor(next.colorInactive);
-    if (inactive) {
-      setInactiveColorHex(inactive.hex);
-      setInactiveOpacity(inactive.opacity);
-    }
-    const bgHex = parseBgColor(next.bgColor);
-    if (bgHex) setBgColorHex(bgHex);
-  }, []);
-
-  /* ---- KTV 底色 / 悬停背景色(hex + 透明度 → rgba) ---- */
+  /* ---- KTV 底色 / 悬停背景色(hex + 透明度 → rgba;选择器值渲染时从 config 派生) ---- */
 
   const updateInactiveColor = useCallback(
     (hex: string, opacity: number) => {
-      setInactiveColorHex(hex);
-      setInactiveOpacity(opacity);
-      const [r, g, b] = hexToRgb(hex);
-      const alpha = (opacity / 100).toFixed(2);
-      patchConfig({ colorInactive: `rgba(${r}, ${g}, ${b}, ${alpha})` });
+      patchConfig({ colorInactive: hexToRgba(hex, opacity) });
     },
     [patchConfig],
   );
 
   const updateBgColor = useCallback(
     (hex: string) => {
-      setBgColorHex(hex);
-      const [r, g, b] = hexToRgb(hex);
-      patchConfig({ bgColor: `rgba(${r}, ${g}, ${b}, 0.2)` });
+      patchConfig({ bgColor: hexToRgba(hex, 20) });
     },
     [patchConfig],
   );
@@ -299,11 +277,8 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const resetConfig = useCallback(() => {
-    const defaults = stripGeometry(defaultLyricConfig());
-    patchConfig(defaults);
-    setInactiveColorHex("#ffffff");
-    setInactiveOpacity(30);
-    setBgColorHex("#000000");
+    // 恢复默认:提交全部外观字段(不含几何)的 partial,属预期的全量外观提交
+    patchConfig(stripGeometry(defaultLyricConfig()));
   }, [patchConfig]);
 
   /* ---- 初始化 ---- */
@@ -343,11 +318,13 @@ export default function App(): React.JSX.Element {
             configRef.current = next;
             return next;
           });
-          applyDerivedColors({ ...defaultLyricConfig(), ...currentConfig });
         }
       } catch (error) {
         console.error("Failed to load lyric config:", error);
       }
+      // 无论成败都解除表单封锁(失败时以默认值继续,可交互)
+      loadedRef.current = true;
+      if (!disposed) setLoaded(true);
 
       void loadSystemFonts();
 
@@ -367,7 +344,7 @@ export default function App(): React.JSX.Element {
     return () => {
       disposed = true;
     };
-  }, [applyDerivedColors]);
+  }, []);
 
   /* ---- 事件订阅 ---- */
 
@@ -380,20 +357,27 @@ export default function App(): React.JSX.Element {
     });
   }, []);
 
-  // 外部配置变更同步(如托盘切换翻译/锁定;本窗防抖提交尚未发出时忽略,避免回声覆盖编辑)
+  // 外部配置变更同步(托盘切换、set-lock、本窗提交的回声均为完整配置)。
+  // 本窗只发真 diff,回声不会破坏已提交字段;仍未发出的本地待提交 diff 覆盖其上,
+  // 避免覆盖正在编辑的字段。
   useEffect(() => {
     return window.desktopAPI.onConfigChanged((next) => {
-      if (!next || configTimerRef.current !== null) return;
-      setConfig((prev) => {
-        const merged = { ...prev, ...next };
+      if (!next) return;
+      setConfig(() => {
+        const merged = { ...defaultLyricConfig(), ...next, ...pendingPatchRef.current };
         configRef.current = merged;
         return merged;
       });
-      applyDerivedColors({ ...defaultLyricConfig(), ...next });
     });
-  }, [applyDerivedColors]);
+  }, []);
 
   /* ---- 派生渲染值 ---- */
+
+  // 颜色选择器值直接从 config 派生(colorInactive / bgColor 为 rgba 字符串;解析失败回退默认)
+  const inactiveDerived = parseInactiveColor(config.colorInactive) ?? { hex: "#ffffff", opacity: 30 };
+  const inactiveColorHex = inactiveDerived.hex;
+  const inactiveOpacity = inactiveDerived.opacity;
+  const bgColorHex = parseBgColor(config.bgColor) ?? "#000000";
 
   const padMaxX = Math.max(1, screenSize.width - geometry.w);
   const padMaxY = Math.max(1, screenSize.height - geometry.h);
@@ -414,8 +398,12 @@ export default function App(): React.JSX.Element {
         </div>
       </header>
 
-      {/* Main Form */}
-      <main className="settings-content">
+      {/* Main Form(初始配置加载完成前禁交互,防止把默认值当作用户改动提交) */}
+      <main
+        className="settings-content"
+        aria-busy={!loaded}
+        style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}
+      >
         {/* Fonts */}
         <section className="settings-section">
           <h3>字体</h3>

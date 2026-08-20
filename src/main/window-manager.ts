@@ -14,6 +14,22 @@ const DEFAULT_LYRIC_HEIGHT = 130;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 let saveLyricBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+let onLyricWindowShow: (() => void) | null = null;
+
+/** 歌词窗变为可见(show / 首次加载完成)时回调,index.ts 用于补发挂起的歌词行 */
+export function setOnLyricWindowShow(cb: () => void): void {
+    onLyricWindowShow = cb;
+}
+
+/** 把当前完整配置广播给歌词窗与设置窗(evConfigChanged) */
+export function broadcastLyricConfig(): void {
+    const currentConfig = config.getConfig();
+    for (const win of [lyricWindow, settingsWindow]) {
+        if (win && !win.isDestroyed()) {
+            win.webContents.send(CH.evConfigChanged, currentConfig);
+        }
+    }
+}
 
 export function isWaylandSession(): boolean {
     const ozoneArgument = process.argv.find(argument =>
@@ -64,13 +80,14 @@ export function getScreenWidth(): number {
 }
 
 export function createMainWindow(): BrowserWindow {
-    if (mainWindow) return mainWindow;
+    if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
     const screenWidth = getScreenWidth();
 
     const win = new BrowserWindow({
         width: 1200,
         height: 800,
-        x: (screenWidth - 1200) / 2,
+        // Electron 43:x/y 任一为非整数时整组坐标被静默丢弃,必须取整
+        x: Math.round((screenWidth - 1200) / 2),
         y: 80,
         show: true,
         frame: false,
@@ -94,6 +111,10 @@ export function createMainWindow(): BrowserWindow {
             e.preventDefault();
             win.hide();
         }
+    });
+
+    win.on("closed", () => {
+        mainWindow = null;
     });
 
     win.on("page-title-updated", (e) => {
@@ -266,7 +287,10 @@ export function createLyricWindow(): BrowserWindow {
     win.on("closed", () => { lyricWindow = null; });
 
     win.on("hide", () => { lyricWindowVisible = false; });
-    win.on("show", () => { lyricWindowVisible = true; });
+    win.on("show", () => {
+        lyricWindowVisible = true;
+        onLyricWindowShow?.();
+    });
 
     win.on("resize", () => {
         if (!lyricWindow) return;
@@ -286,8 +310,11 @@ export function createLyricWindow(): BrowserWindow {
     });
 
     win.webContents.on("did-finish-load", () => {
-        setLyricWindowLock(currentConfig.isLock);
-        win.webContents.send(CH.evConfigChanged, currentConfig);
+        const latestConfig = config.getConfig();
+        setLyricWindowLock(latestConfig.isLock);
+        win.webContents.send(CH.evConfigChanged, latestConfig);
+        // 窗口重建后渲染端是空白状态,补发挂起的歌词行
+        if (lyricWindowVisible) onLyricWindowShow?.();
     });
 
     return win;
@@ -360,10 +387,8 @@ export function resizeLyricWindow(x: number, y: number, width: number, height: n
         width: currentLyricWidth,
         height: currentLyricHeight
     });
-
-    // Notify renderer of the updated size
-    lyricWindow.webContents.send(CH.evWindowResized, [currentLyricWidth, currentLyricHeight]);
-    notifyBoundsChanged();
+    // 尺寸变化时 "resize" 事件已负责 evWindowResized / notifyBoundsChanged;
+    // 尺寸不变时渲染端无需更新,故此处不再显式发送。
 }
 
 export function getMainWindow(): BrowserWindow | null {

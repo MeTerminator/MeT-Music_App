@@ -1,6 +1,5 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 import path from "node:path";
-import { CH } from "../shared/ipc";
 import * as config from "./config";
 import * as windowManager from "./window-manager";
 import { checkForUpdatesManually } from "./updater";
@@ -24,7 +23,7 @@ export function createTray(onPlayPrev: PlayerAction, onPlayNext: PlayerAction, o
 
     tray.on("click", () => {
         const mainWindow = windowManager.getMainWindow();
-        if (!mainWindow) {
+        if (!mainWindow || mainWindow.isDestroyed()) {
             windowManager.createMainWindow();
         } else {
             mainWindow.show();
@@ -133,12 +132,10 @@ export function updateTrayMenu(
         type: "checkbox",
         checked: currentConfig.showTranslation,
         click: () => {
-            currentConfig.showTranslation = !currentConfig.showTranslation;
-            config.saveConfig(currentConfig);
-            const lyricWindow = windowManager.getLyricWindow();
-            if (lyricWindow) {
-                lyricWindow.webContents.send(CH.evConfigChanged, currentConfig);
-            }
+            // 菜单构建时的 config 可能已过期,点击时实时读取,且只落盘目标字段
+            const cfg = config.getConfig();
+            config.saveConfig({ showTranslation: !cfg.showTranslation });
+            windowManager.broadcastLyricConfig();
             updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, true);
         }
     });
@@ -148,13 +145,12 @@ export function updateTrayMenu(
         type: "checkbox",
         checked: currentConfig.isLock,
         click: () => {
-            currentConfig.isLock = !currentConfig.isLock;
-            config.saveConfig(currentConfig);
-            windowManager.setLyricWindowLock(currentConfig.isLock);
-            const lyricWindow = windowManager.getLyricWindow();
-            if (lyricWindow) {
-                lyricWindow.webContents.send(CH.evConfigChanged, currentConfig);
-            }
+            // 菜单构建时的 config 可能已过期,点击时实时读取,且只落盘目标字段
+            const cfg = config.getConfig();
+            const nextLock = !cfg.isLock;
+            config.saveConfig({ isLock: nextLock });
+            windowManager.setLyricWindowLock(nextLock);
+            windowManager.broadcastLyricConfig();
             updateTrayMenu(currentSong, onPlayPrev, onPlayNext, onPlayOrPause, true);
         }
     });
@@ -164,7 +160,7 @@ export function updateTrayMenu(
         label: "打开主界面",
         click: () => {
             const mainWindow = windowManager.getMainWindow();
-            if (!mainWindow) {
+            if (!mainWindow || mainWindow.isDestroyed()) {
                 windowManager.createMainWindow();
             } else {
                 mainWindow.show();

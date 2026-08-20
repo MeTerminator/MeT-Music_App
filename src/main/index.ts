@@ -9,10 +9,11 @@ import {
     WindowControlSchema,
     type AppInfo,
     type HookPayload,
+    type LyricConfig,
     type LyricLineEvent,
     type Rect
 } from "../shared/ipc";
-import type { CoverTheme } from "../shared/hook-contract";
+import { HOOK_MIN_INTERVAL_MS, type CoverTheme } from "../shared/hook-contract";
 import * as config from "./config";
 import * as windowManager from "./window-manager";
 import * as trayManager from "./tray-manager";
@@ -45,8 +46,6 @@ let currentSong: HookPayload = {
     isPlaying: false
 };
 
-const LYRIC_UPDATE_INTERVAL = 50;
-
 interface PendingLyricUpdate {
     lyricText: string;
     lyricData: HookPayload["lyricData"];
@@ -61,15 +60,19 @@ let lastSongLabel = "";
 let lastPlayingState: boolean | null = null;
 
 function flushLyricUpdate(): void {
-    lyricUpdateTimer = null;
+    if (lyricUpdateTimer) {
+        clearTimeout(lyricUpdateTimer);
+        lyricUpdateTimer = null;
+    }
     if (!pendingLyricUpdate) return;
 
+    // 窗口不可见/不存在时保留 pending,待窗口 show 时补发(见 setOnLyricWindowShow)
     const lyricWindow = windowManager.getLyricWindow();
+    if (!lyricWindow || lyricWindow.isDestroyed() || !lyricWindow.isVisible()) return;
+
     const lyricUpdate = pendingLyricUpdate;
     pendingLyricUpdate = null;
     lastLyricUpdateTime = Date.now();
-
-    if (!lyricWindow || lyricWindow.isDestroyed() || !lyricWindow.isVisible()) return;
 
     const currentConfig = config.getConfig();
     const payload: LyricLineEvent = {
@@ -92,7 +95,7 @@ function scheduleLyricUpdate(data: HookPayload): void {
     if (lyricUpdateTimer) return;
 
     const elapsed = Date.now() - lastLyricUpdateTime;
-    const delay = Math.max(0, LYRIC_UPDATE_INTERVAL - elapsed);
+    const delay = Math.max(0, HOOK_MIN_INTERVAL_MS - elapsed);
     lyricUpdateTimer = setTimeout(flushLyricUpdate, delay);
 }
 
@@ -139,7 +142,7 @@ function setupIPC(): void {
                 windowManager.getMainWindow()?.hide();
                 break;
             case "show-main":
-                windowManager.getMainWindow()?.show();
+                showMainWindow();
                 break;
             case "open-settings":
                 windowManager.createSettingsWindow();
@@ -174,12 +177,16 @@ function setupIPC(): void {
 
         switch (action.type) {
             case "set-lock": {
-                const currentConfig = config.getConfig();
-                currentConfig.isLock = action.isLock;
-                config.saveConfig(currentConfig);
-
+                config.saveConfig({ isLock: action.isLock });
                 windowManager.setLyricWindowLock(action.isLock);
+                windowManager.broadcastLyricConfig();
                 trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
+                break;
+            }
+            case "set-passthrough": {
+                // 锁定态解锁按钮 hover 联动:enabled=false 临时关闭穿透使按钮可点;
+                // enabled=true 时按当前 isLock 状态重新应用
+                windowManager.setLyricWindowLock(action.enabled ? config.getConfig().isLock : false);
                 break;
             }
             case "toggle-visibility": {
@@ -210,6 +217,23 @@ function setupIPC(): void {
                 currentConfig.windowWidth = action.bounds.width;
                 currentConfig.windowHeight = action.bounds.height;
                 config.saveConfig(currentConfig);
+                break;
+            }
+            case "save-current-bounds": {
+                // 拖动/缩放结束:main 自读实际 bounds 落盘,渲染端无需回读
+                const lyricWindow = windowManager.getLyricWindow();
+                if (!lyricWindow || lyricWindow.isDestroyed()) break;
+                const bounds = lyricWindow.getBounds();
+                const patch: Partial<LyricConfig> = {
+                    windowWidth: bounds.width,
+                    windowHeight: bounds.height
+                };
+                // Wayland 不暴露全局窗口坐标(恒为 0,0),不覆盖已保存的坐标
+                if (!windowManager.isWaylandSession()) {
+                    patch.windowX = bounds.x;
+                    patch.windowY = bounds.y;
+                }
+                config.saveConfig(patch);
                 break;
             }
             case "reset-position": {
@@ -247,11 +271,9 @@ function setupIPC(): void {
         config.saveConfig(parsed.data);
         const newConfig = config.getConfig();
 
-        const lyricWindow = windowManager.getLyricWindow();
-        if (lyricWindow) {
-            windowManager.setLyricWindowLock(newConfig.isLock);
-            lyricWindow.webContents.send(CH.evConfigChanged, newConfig);
-        }
+        windowManager.setLyricWindowLock(newConfig.isLock);
+        // 合并后的完整配置广播给歌词窗与设置窗(设置窗只发 diff,依赖完整回包对齐)
+        windowManager.broadcastLyricConfig();
 
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
     });
@@ -297,7 +319,8 @@ function playOrPause(): void {
 }
 
 function showMainWindow(): void {
-    const mainWindow = windowManager.getMainWindow() || windowManager.createMainWindow();
+    const existing = windowManager.getMainWindow();
+    const mainWindow = existing && !existing.isDestroyed() ? existing : windowManager.createMainWindow();
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
@@ -320,6 +343,10 @@ app.on("before-quit", () => {
 
 app.whenReady().then(() => {
     config.loadConfig();
+    // 歌词窗隐藏期间 flush 会保留 pending,重新可见时补发最后一次歌词行
+    windowManager.setOnLyricWindowShow(() => {
+        if (pendingLyricUpdate) flushLyricUpdate();
+    });
     windowManager.createMainWindow();
     windowManager.createLyricWindow();
     trayManager.createTray(playPrev, playNext, playOrPause);

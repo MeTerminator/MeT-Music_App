@@ -8,6 +8,7 @@ import {
     type MouseEvent as ReactMouseEvent,
 } from "react";
 import { defaultLyricConfig, type LyricConfig, type LyricLineEvent } from "@shared/ipc";
+import { hexToRgba } from "@renderer/shared/color";
 import { Toolbar } from "./Toolbar";
 
 type LyricWord = LyricLineEvent["lyricData"][number];
@@ -63,18 +64,6 @@ interface InteractionState {
     winHeight: number;
     /** 异步取到窗口 bounds 之后才允许 move/resize,避免起点为 0 的跳变 */
     ready: boolean;
-    lastX: number;
-    lastY: number;
-}
-
-function hexToRgba(hex: string, opacityPercent: number): string {
-    if (!hex) return "rgba(255, 255, 255, 1)";
-    const cleanHex = hex.replace("#", "");
-    const r = parseInt(cleanHex.substring(0, 2), 16);
-    const g = parseInt(cleanHex.substring(2, 4), 16);
-    const b = parseInt(cleanHex.substring(4, 6), 16);
-    const alpha = (opacityPercent / 100).toFixed(2);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /**
@@ -103,6 +92,49 @@ function ktvBackgroundPositionX(percent: number): string {
 
 const INITIAL_LINE: LineState = { key: 0, text: "MeT-Music", trans: "", data: [] };
 
+interface LyricLineProps {
+    text: string;
+    data: LyricWord[];
+    /** KTV 染色进度(backgroundPositionX);纯文本行不使用 */
+    posX: string;
+    /** 超宽行横向滚动位移(px) */
+    tx: number;
+    lineRef?: (el: HTMLDivElement | null) => void;
+}
+
+/** 单行歌词(KTV 逐字行 / 纯文本行),当前行与离场行共用 */
+function LyricLine({ text, data, posX, tx, lineRef }: LyricLineProps): JSX.Element {
+    if (data.length > 0) {
+        return (
+            <div
+                ref={lineRef}
+                className="ktv-line"
+                style={{ backgroundPositionX: posX, transform: `translateX(${tx}px)` }}
+            >
+                {data.map((word, index) => (
+                    <span key={index} className="ktv-word">
+                        {word.content}
+                    </span>
+                ))}
+            </div>
+        );
+    }
+    return (
+        <div ref={lineRef} className="plain-line" style={{ transform: `translateX(${tx}px)` }}>
+            {text || "MeT-Music"}
+        </div>
+    );
+}
+
+/** 翻译行(当前行与离场行共用) */
+function TranslationLine({ className, trans }: { className: string; trans: string }): JSX.Element {
+    return (
+        <div className={className}>
+            <div id="lyric-tran">{trans}</div>
+        </div>
+    );
+}
+
 export function App(): JSX.Element {
     const [config, setConfig] = useState<LyricConfig>(() => defaultLyricConfig());
     const [isPlaying, setIsPlaying] = useState(false);
@@ -123,7 +155,6 @@ export function App(): JSX.Element {
     const lineStateRef = useRef<LineState>(INITIAL_LINE);
     const latestDataRef = useRef<LyricWord[]>([]);
     const lineSigRef = useRef("");
-    const themeSigRef = useRef("");
     const prevProgressRef = useRef<number | null>(null);
     const ktvRef = useRef({ percent: 0, tx: 0 });
     const metricsRef = useRef<KtvMetrics | null>(null);
@@ -237,6 +268,8 @@ export function App(): JSX.Element {
                 nextProgress + 0.05 < prevProgressRef.current;
             const lineChanged = textChanged || structureChanged || repeatedTextStartedNewLine;
 
+            latestDataRef.current = nextData;
+
             if (lineChanged) {
                 // 离场快照(冻结旧行的染色进度),行 key 自增以强制重放行切换过渡
                 const snapshot: LeavingLine = {
@@ -257,19 +290,17 @@ export function App(): JSX.Element {
                 lineStateRef.current = nextLine;
                 setLine(nextLine);
                 setLeaving(snapshot);
+                // 封面主题只在行切换时刷新(IPC 每 tick 都是新对象,逐 tick 深比较不值得;
+                // 同为 null 时 React 按引用相等跳过重渲染)
+                setCoverTheme(data.coverTheme ?? null);
             } else {
+                // 同行 tick:进度数据走 latestDataRef + rAF KTV 通道,不再 setLine 新对象;
+                // 仅翻译实际变化时才触发一次 setLine
                 const nextLine: LineState = { ...cur, text: nextText, trans: nextTrans, data: nextData };
                 lineStateRef.current = nextLine;
-                setLine(nextLine);
+                if (nextTrans !== cur.trans) setLine(nextLine);
             }
 
-            latestDataRef.current = nextData;
-
-            const nextThemeSig = JSON.stringify(data.coverTheme ?? null);
-            if (nextThemeSig !== themeSigRef.current) {
-                themeSigRef.current = nextThemeSig;
-                setCoverTheme(data.coverTheme ?? null);
-            }
             prevProgressRef.current = nextProgress;
 
             // 行变化时由 line.key effect 在渲染完成后重测(对应旧 nextTick)
@@ -291,11 +322,12 @@ export function App(): JSX.Element {
         return () => clearTimeout(timer);
     }, [leaving]);
 
-    /** 内容区高度变化 → 重测布局 */
-    useEffect(() => {
+    /** 窗口尺寸变化 → 显式失效缓存并调度重测(不依赖 mainContentHeight state 变化:
+     *  高度不变仅宽度变化时 state 不更新,但 KTV 布局仍需重测) */
+    const invalidateKtvLayout = useCallback(() => {
         metricsRef.current = null;
         scheduleKtvUpdate();
-    }, [mainContentHeight, scheduleKtvUpdate]);
+    }, [scheduleKtvUpdate]);
 
     // ---- 字号:按内容区高度自适应(与旧实现一致,config.fontSize 不直接参与) ----
 
@@ -312,7 +344,8 @@ export function App(): JSX.Element {
     /** 字号/字体/字重变化会使已测量的 KTV 布局失效(对应旧 layoutStyleSignature) */
     useEffect(() => {
         metricsRef.current = null;
-    }, [computedFontSize, lyricFontFamily, config.lyricFontWeight]);
+        scheduleKtvUpdate();
+    }, [computedFontSize, lyricFontFamily, config.lyricFontWeight, scheduleKtvUpdate]);
 
     // ---- IPC 订阅与初始化 ----
 
@@ -320,20 +353,21 @@ export function App(): JSX.Element {
         let disposed = false;
         const unsubs: Array<() => void> = [];
 
-        void (async () => {
-            try {
-                const info = await window.desktopAPI.getAppInfo();
-                if (!disposed) setIsWayland(Boolean(info?.isWayland));
-            } catch {
-                /* 环境信息获取失败时按非 Wayland 处理 */
+        // 两个 invoke 并发发出(allSettled 保留各自的失败兜底语义)
+        void Promise.allSettled([
+            window.desktopAPI.getAppInfo(),
+            window.desktopAPI.getLyricConfig(),
+        ]).then(([infoResult, configResult]) => {
+            if (disposed) return;
+            // 环境信息获取失败时按非 Wayland 处理
+            if (infoResult.status === "fulfilled") {
+                setIsWayland(Boolean(infoResult.value?.isWayland));
             }
-            try {
-                const initial = await window.desktopAPI.getLyricConfig();
-                if (!disposed && initial) setConfig((prev) => ({ ...prev, ...initial }));
-            } catch {
-                /* 保持默认配置 */
+            // 配置获取失败时保持默认配置
+            if (configResult.status === "fulfilled" && configResult.value) {
+                setConfig((prev) => ({ ...prev, ...configResult.value }));
             }
-        })();
+        });
 
         unsubs.push(window.desktopAPI.onLyricChange(handleLyricChange));
         unsubs.push(window.desktopAPI.onStatusChange((state) => setIsPlaying(Boolean(state))));
@@ -347,6 +381,7 @@ export function App(): JSX.Element {
         unsubs.push(
             window.desktopAPI.onWindowResized((_width, height) => {
                 setMainContentHeight(Math.max(50, height - LAYOUT_OVERHEAD));
+                invalidateKtvLayout();
             })
         );
 
@@ -354,16 +389,17 @@ export function App(): JSX.Element {
             disposed = true;
             for (const unsub of unsubs) unsub();
         };
-    }, [handleLyricChange]);
+    }, [handleLyricChange, invalidateKtvLayout]);
 
     /** 窗口自身 resize 事件(与主进程事件互为兜底,同旧实现) */
     useEffect(() => {
         const onResize = () => {
             setMainContentHeight(Math.max(50, window.innerHeight - LAYOUT_OVERHEAD));
+            invalidateKtvLayout();
         };
         window.addEventListener("resize", onResize);
         return () => window.removeEventListener("resize", onResize);
-    }, []);
+    }, [invalidateKtvLayout]);
 
     // ---- 拖动 / 调整大小(非 Wayland:JS 实现;Wayland:原生 app-region + 原生边缘 resize) ----
 
@@ -382,8 +418,6 @@ export function App(): JSX.Element {
             winWidth: 0,
             winHeight: 0,
             ready: false,
-            lastX: 0,
-            lastY: 0,
         };
         interactionRef.current = state;
         setIsDragging(true);
@@ -396,8 +430,6 @@ export function App(): JSX.Element {
                 state.startWinY = bounds.y;
                 state.winWidth = bounds.width;
                 state.winHeight = bounds.height;
-                state.lastX = bounds.x;
-                state.lastY = bounds.y;
                 state.ready = true;
             })
             .catch(() => {
@@ -423,8 +455,6 @@ export function App(): JSX.Element {
             winWidth: 0,
             winHeight: 0,
             ready: false,
-            lastX: 0,
-            lastY: 0,
         };
         interactionRef.current = state;
 
@@ -454,8 +484,6 @@ export function App(): JSX.Element {
             if (state.mode === "drag") {
                 const x = state.startWinX + deltaX;
                 const y = state.startWinY + deltaY;
-                state.lastX = x;
-                state.lastY = y;
                 window.desktopAPI.lyricWindow({ type: "move", x, y });
                 return;
             }
@@ -507,24 +535,8 @@ export function App(): JSX.Element {
             setIsDragging(false);
             if (!state || !state.ready) return;
 
-            if (state.mode === "drag") {
-                // 拖动结束:保存位置
-                window.desktopAPI.lyricWindow({
-                    type: "save-position",
-                    x: Math.floor(state.lastX),
-                    y: Math.floor(state.lastY),
-                });
-            } else {
-                // 调整大小结束:保存完整 bounds
-                void window.desktopAPI
-                    .getLyricBounds()
-                    .then((bounds) => {
-                        window.desktopAPI.lyricWindow({ type: "save-bounds", bounds });
-                    })
-                    .catch(() => {
-                        /* 忽略,下次交互再保存 */
-                    });
-            }
+            // 拖动/调整大小结束:main 自读当前 bounds 落盘,无需回读 invoke
+            window.desktopAPI.lyricWindow({ type: "save-current-bounds" });
         };
 
         window.addEventListener("mousemove", onMouseMove);
@@ -547,6 +559,19 @@ export function App(): JSX.Element {
         const nextLock = !configRef.current.isLock;
         setConfig((prev) => ({ ...prev, isLock: nextLock }));
         window.desktopAPI.lyricWindow({ type: "set-lock", isLock: nextLock });
+    }, []);
+
+    // 锁定态穿透联动:darwin/win32 的 setIgnoreMouseEvents(true, {forward}) 只转发
+    // mousemove(点击仍穿透),因此解锁按钮 hover 时临时关闭穿透使其可点击。
+    // Linux/Wayland 无 forward,锁定后收不到任何鼠标事件,这两个回调天然不会触发
+    // (即保持旧行为:锁定态不显示/不响应按钮),无需按平台分支。
+    const onLockButtonEnter = useCallback(() => {
+        if (!configRef.current.isLock) return;
+        window.desktopAPI.lyricWindow({ type: "set-passthrough", enabled: false });
+    }, []);
+    const onLockButtonLeave = useCallback(() => {
+        if (!configRef.current.isLock) return;
+        window.desktopAPI.lyricWindow({ type: "set-passthrough", enabled: true });
     }, []);
 
     // ---- 样式变量(对应旧 watchEffect 写入 #app 的 CSS 变量) ----
@@ -606,6 +631,8 @@ export function App(): JSX.Element {
                 onPlayOrPause={playOrPause}
                 onPlayNext={playNext}
                 onToggleLock={toggleLock}
+                onLockMouseEnter={onLockButtonEnter}
+                onLockMouseLeave={onLockButtonLeave}
                 onClose={closeLyric}
             />
 
@@ -613,66 +640,40 @@ export function App(): JSX.Element {
                 <div id="lyric-text-container" ref={containerRef}>
                     {leaving && (
                         <div key={`leave-${leaving.key}`} className="lyric-wrapper lyric-scroll-leave">
-                            {leaving.data.length > 0 ? (
-                                <div
-                                    className="ktv-line"
-                                    style={{
-                                        backgroundPositionX: leaving.posX,
-                                        transform: `translateX(${leaving.tx}px)`,
-                                    }}
-                                >
-                                    {leaving.data.map((word, index) => (
-                                        <span key={index} className="ktv-word">
-                                            {word.content}
-                                        </span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="plain-line" style={{ transform: `translateX(${leaving.tx}px)` }}>
-                                    {leaving.text || "MeT-Music"}
-                                </div>
-                            )}
+                            <LyricLine
+                                text={leaving.text}
+                                data={leaving.data}
+                                posX={leaving.posX}
+                                tx={leaving.tx}
+                            />
                         </div>
                     )}
 
                     <div key={line.key} className={`lyric-wrapper${enterClass}`}>
-                        {line.data.length > 0 ? (
-                            <div
-                                ref={setCurrentLineEl}
-                                className="ktv-line"
-                                style={{
-                                    backgroundPositionX: ktv.posX,
-                                    transform: `translateX(${ktv.tx}px)`,
-                                }}
-                            >
-                                {line.data.map((word, index) => (
-                                    <span key={index} className="ktv-word">
-                                        {word.content}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <div
-                                ref={setCurrentLineEl}
-                                className="plain-line"
-                                style={{ transform: `translateX(${ktv.tx}px)` }}
-                            >
-                                {line.text || "MeT-Music"}
-                            </div>
-                        )}
+                        <LyricLine
+                            text={line.text}
+                            data={line.data}
+                            posX={ktv.posX}
+                            tx={ktv.tx}
+                            lineRef={setCurrentLineEl}
+                        />
                     </div>
                 </div>
 
                 {hasTrans && (
                     <div id="lyric-tran-container">
                         {leaving && leaving.trans !== "" && (
-                            <div key={`leave-${leaving.key}`} className="lyric-tran-wrapper lyric-scroll-leave">
-                                <div id="lyric-tran">{leaving.trans}</div>
-                            </div>
+                            <TranslationLine
+                                key={`leave-${leaving.key}`}
+                                className="lyric-tran-wrapper lyric-scroll-leave"
+                                trans={leaving.trans}
+                            />
                         )}
-                        <div key={line.key} className={`lyric-tran-wrapper${transEnterClass}`}>
-                            <div id="lyric-tran">{line.trans}</div>
-                        </div>
+                        <TranslationLine
+                            key={line.key}
+                            className={`lyric-tran-wrapper${transEnterClass}`}
+                            trans={line.trans}
+                        />
                     </div>
                 )}
             </main>
