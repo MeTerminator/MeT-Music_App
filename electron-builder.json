@@ -5,9 +5,7 @@
     "output": "dist"
   },
   "files": [
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/renderer/**/*",
+    "out/**/*",
     "public/**/*",
     "package.json"
   ],

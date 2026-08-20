@@ -1,15 +1,18 @@
 {
     "name": "metmusic-app",
-    "version": "1.4.0",
+    "version": "2.0.0-alpha.0",
     "description": "MeT-Music_App",
-    "main": "src/main/index.js",
+    "main": "./out/main/index.js",
     "scripts": {
-        "start": "electron .",
-        "pack": "electron-builder --dir",
-        "dist": "electron-builder",
-        "dist:mac": "electron-builder --mac",
-        "dist:win": "electron-builder --win",
-        "dist:linux": "electron-builder --linux"
+        "dev": "electron-vite dev",
+        "build": "electron-vite build",
+        "start": "electron-vite preview",
+        "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+        "pack": "electron-vite build && electron-builder --dir",
+        "dist": "electron-vite build && electron-builder",
+        "dist:mac": "electron-vite build && electron-builder --mac",
+        "dist:win": "electron-vite build && electron-builder --win",
+        "dist:linux": "electron-vite build && electron-builder --linux"
     },
     "author": {
         "name": "MeTerminator",
@@ -24,10 +27,19 @@
     "license": "MIT",
     "packageManager": "pnpm@11.21.0",
     "devDependencies": {
+        "@types/node": "^26.2.0",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.4",
+        "@vitejs/plugin-react": "^6.0.5",
         "electron": "^43.4.1",
-        "electron-builder": "^26.15.3"
+        "electron-builder": "^26.15.3",
+        "electron-vite": "^5.0.0",
+        "typescript": "^7.0.2",
+        "vite": "^8.2.1"
     },
     "dependencies": {
-        "vue": "^3.5.41"
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "zod": "^4.4.3"
     }
 }
