@@ -58,7 +58,17 @@ export const PlayerCommandSchema = z.object({
 export type PlayerCommand = z.infer<typeof PlayerCommandSchema>;
 
 export const WindowControlSchema = z.object({
-  action: z.enum(["hide-main", "show-main", "open-settings", "close-settings"]),
+  action: z.enum([
+    "hide-main",
+    "show-main",
+    "open-settings",
+    "close-settings",
+    /* ---- 主窗窗口控制(主窗是 frame: false,按钮由远端 UI 渲染后回调过来) ---- */
+    "minimize-main",
+    "toggle-maximize-main",
+    /** 走 win.close() —— 隐藏到托盘还是真正退出,由 main 侧既有的 close 处理决定 */
+    "close-main",
+  ]),
 });
 export type WindowControl = z.infer<typeof WindowControlSchema>;
 
@@ -113,6 +123,10 @@ export interface MainWindowAPI {
   sendHookData(data: HookPayload): void;
   hideWindow(): void;
   openSettings(): void;
+  /* 窗口控制(无边框主窗的最小化/最大化/关闭,由 UI 顶栏按钮触发) */
+  minimizeWindow(): void;
+  toggleMaximize(): void;
+  closeWindow(): void;
 }
 
 /** 歌词窗 / 设置窗 preload */

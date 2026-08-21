@@ -150,6 +150,22 @@ function setupIPC(): void {
             case "close-settings":
                 windowManager.getSettingsWindow()?.close();
                 break;
+            case "minimize-main":
+                windowManager.getMainWindow()?.minimize();
+                break;
+            case "toggle-maximize-main": {
+                const main = windowManager.getMainWindow();
+                if (!main) break;
+                // 状态回推由 window-manager 挂在 maximize/unmaximize 事件上,此处不必手动通知
+                if (main.isMaximized()) main.unmaximize();
+                else main.maximize();
+                break;
+            }
+            case "close-main":
+                // 走 win.close():是隐藏到托盘还是真正退出,交给 createMainWindow 里
+                // 既有的 close 处理(isQuiting 判定),不在这里另起一套关闭策略
+                windowManager.getMainWindow()?.close();
+                break;
         }
     });
 

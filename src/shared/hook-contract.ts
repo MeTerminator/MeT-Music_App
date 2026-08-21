@@ -17,6 +17,16 @@
  *   3. payload 结构以本文件 zod schema 为准(v1 仅有文档描述)。
  *
  * 破坏性变更流程:改动任何 schema/函数签名 → 版本号 +1 → 两仓同步提交。
+ *
+ * ⚠️ 为什么窗口控制(2026-08-21 追加)没有把版本号顶到 v3:
+ *   UI 是宿主从远端 URL 加载的,**UI 会先于用户安装的 App 更新**。
+ *   HookPayloadSchema.contractVersion 是 z.literal(CONTRACT_VERSION),
+ *   一旦 UI 发出 3 而用户装的仍是 v2 App,App 侧 payload 校验会整体失败,
+ *   桌面歌词直接哑掉。所以窗口控制一律做成**纯增量**:
+ *   HostCallbacksSchema 只加可选字段,payload schema 一字未动,
+ *   CONTRACT_VERSION 保持 2。UI 按「回调存在才渲染对应按钮」降级,
+ *   旧 App 上表现与改动前完全一致。
+ *   下次真要动 payload 结构时再走版本号 +1 的流程。
  */
 
 import { z } from "zod";
@@ -88,11 +98,24 @@ export type HookPayload = z.infer<typeof HookPayloadSchema>;
  * UI 收到注册后即认定运行于桌面宿主内(这是 UI 判断宿主环境的唯一依据),
  * 并在导航栏渲染设置/隐藏按钮,点击时回调对应函数。
  */
+const hostCallback = () => z.custom<() => void>((v) => typeof v === "function").optional();
+
 export const HostCallbacksSchema = z.object({
   /** 用户点击 UI 内"设置"按钮(打开桌面歌词外观设置窗) */
-  onOpenSettings: z.custom<() => void>((v) => typeof v === "function").optional(),
+  onOpenSettings: hostCallback(),
   /** 用户点击 UI 内"隐藏"按钮(主窗隐藏到托盘) */
-  onHideWindow: z.custom<() => void>((v) => typeof v === "function").optional(),
+  onHideWindow: hostCallback(),
+
+  /* ---- 窗口控制(2026-08-21 追加;全部可选,缺省则 UI 不渲染对应按钮) ----
+     主窗是 frame: false 的无边框窗口,窗口按钮与拖拽区都得由 UI 提供。
+     UI 侧只负责「点了就回调」,具体语义(是否询问、隐藏到托盘还是退出)
+     一律留给宿主,免得两仓各自实现一套关闭策略。 */
+  /** 最小化主窗 */
+  onMinimizeWindow: hostCallback(),
+  /** 最大化 / 还原主窗(由宿主判断当前状态并取反) */
+  onToggleMaximize: hostCallback(),
+  /** 关闭主窗;隐藏到托盘还是真正退出由宿主的「关闭方式」设置决定 */
+  onCloseWindow: hostCallback(),
 });
 
 export type HostCallbacks = z.infer<typeof HostCallbacksSchema>;
@@ -119,6 +142,13 @@ export interface MeTMusicGlobals {
   $MeTMusic_prev: () => void;
   /** v2 新增;v1 UI 不存在此函数,宿主注入前需判空 */
   $MeTMusic_registerHost?: (callbacks: HostCallbacks) => void;
+  /**
+   * 宿主向 UI 回推主窗状态(2026-08-21 追加,可选)。
+   * 用户双击拖拽区、用系统快捷键或窗口菜单改变最大化状态时,UI 无从感知,
+   * 「最大化/还原」图标会和实际状态对不上,故由宿主在 maximize/unmaximize
+   * 事件里回推一次。宿主注入前需判空(旧 UI 没有此函数)。
+   */
+  $MeTMusic_setWindowState?: (state: { maximized: boolean }) => void;
 }
 
 declare global {

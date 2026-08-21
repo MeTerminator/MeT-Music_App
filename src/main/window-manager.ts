@@ -122,6 +122,21 @@ export function createMainWindow(): BrowserWindow {
         win.setTitle("MeT-MusicQ");
     });
 
+    // 主窗最大化状态回推给 UI:用户双击拖拽区、走系统快捷键或窗口菜单时,
+    // UI 无从感知,「最大化/还原」图标会和实际状态对不上。
+    // 函数不存在(旧 UI)时短路求值直接跳过;页面正在导航时 executeJavaScript
+    // 会 reject,吞掉即可。
+    const pushWindowState = (): void => {
+        if (win.isDestroyed()) return;
+        win.webContents
+            .executeJavaScript(
+                `typeof window.$MeTMusic_setWindowState === "function" && window.$MeTMusic_setWindowState({ maximized: ${win.isMaximized()} });`
+            )
+            .catch(() => undefined);
+    };
+    win.on("maximize", pushWindowState);
+    win.on("unmaximize", pushWindowState);
+
     win.webContents.on("did-finish-load", () => {
         // 契约 v2(src/shared/hook-contract.ts):
         //  1. 注入 $MeTMusic_Hook 回调;
@@ -135,7 +150,11 @@ export function createMainWindow(): BrowserWindow {
                 // === 契约 v2:UI 自行渲染设置/隐藏按钮 ===
                 window.$MeTMusic_registerHost({
                     onOpenSettings: () => window.electronAPI.openSettings(),
-                    onHideWindow: () => window.electronAPI.hideWindow()
+                    onHideWindow: () => window.electronAPI.hideWindow(),
+                    // 无边框主窗的窗口按钮(契约里全是可选项,旧 UI 收到多余字段也无妨)
+                    onMinimizeWindow: () => window.electronAPI.minimizeWindow(),
+                    onToggleMaximize: () => window.electronAPI.toggleMaximize(),
+                    onCloseWindow: () => window.electronAPI.closeWindow()
                 });
             } else {
                 // === v1 UI 降级:注入隐藏/设置按钮 ===
@@ -217,6 +236,8 @@ export function createMainWindow(): BrowserWindow {
             }
         `;
         win.webContents.executeJavaScript(inject);
+        // 注册完立刻对齐一次,免得 UI 的「最大化/还原」图标一上来就是错的
+        pushWindowState();
     });
 
     return win;

@@ -8,7 +8,13 @@ import type { HookPayload } from "../shared/hook-contract";
 const api: MainWindowAPI = {
     sendHookData: (data: HookPayload) => ipcRenderer.send(CH.hookState, data),
     hideWindow: () => ipcRenderer.send(CH.windowControl, { action: "hide-main" } satisfies WindowControl),
-    openSettings: () => ipcRenderer.send(CH.windowControl, { action: "open-settings" } satisfies WindowControl)
+    openSettings: () => ipcRenderer.send(CH.windowControl, { action: "open-settings" } satisfies WindowControl),
+    minimizeWindow: () =>
+        ipcRenderer.send(CH.windowControl, { action: "minimize-main" } satisfies WindowControl),
+    toggleMaximize: () =>
+        ipcRenderer.send(CH.windowControl, { action: "toggle-maximize-main" } satisfies WindowControl),
+    closeWindow: () =>
+        ipcRenderer.send(CH.windowControl, { action: "close-main" } satisfies WindowControl)
 };
 
 contextBridge.exposeInMainWorld("electronAPI", api);
