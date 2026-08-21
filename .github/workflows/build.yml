@@ -1,7 +1,22 @@
-name: Build and Package App
+name: Build and Release App
 
 on:
   workflow_dispatch: # Allows manual trigger from the Actions tab
+    inputs:
+      tag:
+        description: 'Release tag (defaults to v<version> from package.json)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the release as a pre-release'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create the release as a draft (publish it manually later)'
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - 'v*' # Trigger on version tags (e.g., v1.2.0)
@@ -10,8 +25,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release:
+  build:
     name: Build & Package (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -35,20 +54,55 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build and Package App
+      - name: Configure macOS Code Signing
+        if: matrix.os == 'macos-latest'
         env:
-          # Disable macOS identity auto-discovery to prevent builds from failing due to lack of local certificates.
-          # If you have signing certificates, you can configure them via secrets later.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Developer ID Application cert exported as .p12, then base64-encoded.
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          # Notarization credentials (Apple ID route).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            pnpm run dist:mac --publish never
-          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            pnpm run dist:win --publish never
+          # These vars must stay UNSET when no cert is configured: electron-builder
+          # treats an empty CSC_LINK as a file path and aborts. Hence $GITHUB_ENV
+          # instead of a plain `env:` block on the build step.
+          if [ -n "$MACOS_CERTIFICATE" ]; then
+            CERT_PATH="$RUNNER_TEMP/certificate.p12"
+            echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+            echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$MACOS_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+            echo "::notice::macOS code signing enabled"
           else
-            pnpm run dist:linux --publish never
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning::MACOS_CERTIFICATE not set - shipping an UNSIGNED macOS build"
           fi
+
+          # electron-builder notarizes automatically once these three are present,
+          # and throws if only some of them are. All-or-nothing.
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "APPLE_ID=$APPLE_ID" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
+            echo "::notice::macOS notarization enabled"
+          else
+            echo "::warning::Apple notarization credentials not set - skipping notarization"
+          fi
+
+      - name: Build and Package App (macOS)
+        if: matrix.os == 'macos-latest'
+        run: pnpm run dist:mac --publish never
+
+      - name: Build and Package App (Windows)
+        if: matrix.os == 'windows-latest'
+        run: pnpm run dist:win --publish never
         shell: bash
+
+      - name: Build and Package App (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm run dist:linux --publish never
 
       - name: Upload Artifacts to Action Run
         uses: actions/upload-artifact@v4
@@ -65,18 +119,47 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
 
-      - name: Upload Release Assets (on version tag push)
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Resolve Release Tag
+        id: meta
+        run: |
+          if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/}" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v$(jq -r .version package.json)"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG}"
+
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
         with:
-          files: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.deb
-            dist/*.rpm
-            dist/*.AppImage
-            dist/latest*.yml
-            dist/*.blockmap
+          pattern: metmusic-app-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: List Collected Assets
+        run: ls -lh release-assets
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          draft: ${{ inputs.draft == true }}
+          prerelease: ${{ inputs.prerelease == true }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
