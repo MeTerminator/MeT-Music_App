@@ -25,7 +25,7 @@
     },
     "homepage": "https://met6.top/music/",
     "license": "MIT",
-    "packageManager": "pnpm@11.21.0",
+    "packageManager": "pnpm@11.22.0",
     "devDependencies": {
         "@types/node": "^26.2.0",
         "@types/react": "^19.2.18",
