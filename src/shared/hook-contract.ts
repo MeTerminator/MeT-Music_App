@@ -27,6 +27,12 @@
  *   CONTRACT_VERSION 保持 2。UI 按「回调存在才渲染对应按钮」降级,
  *   旧 App 上表现与改动前完全一致。
  *   下次真要动 payload 结构时再走版本号 +1 的流程。
+ *
+ * ⚠️ 外部 API(2026-08-21 追加)同理没有顶版本号:
+ *   App 侧的 HTTP / WebSocket 外部接口要读播放快照、要能 seek / 调音量,
+ *   这些能力以**新增的可选全局函数**提供(MeTMusicGlobals 末尾一组),
+ *   payload schema 一字未动,CONTRACT_VERSION 仍是 2。
+ *   App 每次调用前判空:UI 太旧就让对应端点返回 501,而不是整个服务失效。
  */
 
 import { z } from "zod";
@@ -92,6 +98,80 @@ export type WordProgress = z.infer<typeof WordProgressSchema>;
 export type CoverTheme = z.infer<typeof CoverThemeSchema>;
 export type HookPayload = z.infer<typeof HookPayloadSchema>;
 
+/* ==================== 外部 API 数据结构(2026-08-21 追加) ====================
+   App 侧的 HTTP / WebSocket 外部接口对外暴露的播放快照与歌词,
+   数据只能来自 UI —— 故在此定义形状,由 UI 的 $MeTMusic_getState /
+   $MeTMusic_getLyrics 现取现给(hook payload 是播放 tick 驱动的,
+   暂停时不再更新,拿它当查询结果会读到陈旧进度)。
+   时间单位一律毫秒,与外部接口对外口径一致(UI 内部是秒,在此转换)。 */
+
+/** 播放状态快照(对应外部接口 GET /api/status) */
+export const PlaybackSnapshotSchema = z.object({
+  state: z.enum(["playing", "paused", "stopped"]),
+  /** 当前进度(毫秒) */
+  position: z.number(),
+  /** 总时长(毫秒);元数据未加载时为 0 */
+  duration: z.number(),
+  /** 音量 0 ~ 1 */
+  volume: z.number(),
+  /** 当前曲目是否已播放结束 */
+  isFinished: z.boolean(),
+});
+export type PlaybackSnapshot = z.infer<typeof PlaybackSnapshotSchema>;
+
+/** 单行歌词(逐字行的 content 为整行拼接文本,words 保留逐字切分) */
+export const LyricLineSchema = z.object({
+  /** 行起始时间(毫秒) */
+  time: z.number(),
+  /** 行结束时间(毫秒);纯 lrc 无此字段 */
+  endTime: z.number().optional(),
+  content: z.string(),
+  /** 翻译 */
+  tran: z.string().optional(),
+  /** 音译 */
+  roma: z.string().optional(),
+  /** 逐字切分(仅 yrc);start/end 为毫秒 */
+  words: z
+    .array(z.object({ content: z.string(), start: z.number(), end: z.number() }))
+    .optional(),
+});
+export type LyricLine = z.infer<typeof LyricLineSchema>;
+
+/**
+ * 轻量播放快照(对应外部接口 GET /api/now-playing)。
+ * 含曲目信息与当前歌词行,但不含歌词正文全量 —— 供外部频繁轮询,
+ * 需要完整歌词时另走 GET /api/lyrics。
+ */
+export const NowPlayingSchema = PlaybackSnapshotSchema.extend({
+  /** 歌曲 id;本地歌曲等场景可能为字符串 "Unknown" */
+  id: z.union([z.string(), z.number()]),
+  name: z.string(),
+  /** 多歌手以 " / " 连接 */
+  artist: z.string(),
+  album: z.string().optional(),
+  /** 大图封面 URL */
+  cover: z.string().optional(),
+  /** 当前曲目是否有歌词 */
+  lyricAvailable: z.boolean(),
+  /** 歌词行数 */
+  lyricLineCount: z.number(),
+  /** 当前行歌词原文 */
+  lyricText: z.string(),
+  /** 当前行翻译 */
+  lyricTrans: z.string().optional(),
+});
+export type NowPlaying = z.infer<typeof NowPlayingSchema>;
+
+/** 完整歌词(对应外部接口 GET /api/lyrics) */
+export const LyricsSnapshotSchema = z.object({
+  /** 歌词来源:逐字 / 逐行 / 无 */
+  source: z.enum(["yrc", "lrc", "none"]),
+  /** UI 侧歌词偏移设置(毫秒) */
+  offset: z.number(),
+  lines: z.array(LyricLineSchema),
+});
+export type LyricsSnapshot = z.infer<typeof LyricsSnapshotSchema>;
+
 /**
  * 宿主注册接口(v2 新增)。
  * App 在注入 $MeTMusic_Hook 的同时调用 $MeTMusic_registerHost;
@@ -149,6 +229,26 @@ export interface MeTMusicGlobals {
    * 事件里回推一次。宿主注入前需判空(旧 UI 没有此函数)。
    */
   $MeTMusic_setWindowState?: (state: { maximized: boolean }) => void;
+
+  /* ---- 外部 API 支撑(2026-08-21 追加,全部可选;宿主调用前必须判空) ----
+     App 的 HTTP / WebSocket 外部接口靠这几个函数取数与控制播放。
+     宿主经 executeJavaScript 调用,取数类返回可结构化克隆的普通对象。 */
+  /** 播放(已在播放则什么都不做;$MeTMusic_playOrPause 是切换,外部接口要的是幂等) */
+  $MeTMusic_play?: () => void;
+  /** 暂停(已暂停则什么都不做) */
+  $MeTMusic_pause?: () => void;
+  /** 停止播放(停播并清空媒体会话) */
+  $MeTMusic_stop?: () => void;
+  /** 跳转到指定进度(秒) */
+  $MeTMusic_seek?: (seconds: number) => void;
+  /** 设置音量(0 ~ 1) */
+  $MeTMusic_setVolume?: (volume: number) => void;
+  /** 现取播放状态快照(不依赖 hook tick,暂停时同样准确) */
+  $MeTMusic_getState?: () => PlaybackSnapshot;
+  /** 现取轻量播放快照(曲目信息 + 当前歌词行,不含歌词正文全量) */
+  $MeTMusic_getNowPlaying?: () => NowPlaying;
+  /** 现取当前曲目的完整歌词 */
+  $MeTMusic_getLyrics?: () => LyricsSnapshot;
 }
 
 declare global {

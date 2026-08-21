@@ -37,6 +37,18 @@ export const CH = {
   evWindowResized: "lyric:window-resized",
   /** 歌词窗 bounds 变化 → 设置窗(旧 lyric-bounds-changed) */
   evBoundsChanged: "lyric:bounds-changed",
+
+  /* ---- 外部 API(HTTP / WebSocket)---- */
+  /** invoke:外部 API 配置 */
+  apiConfigGet: "api:config-get",
+  /** send:保存外部 API 配置(据此重启/停止服务)并广播 */
+  apiConfigSet: "api:config-set",
+  /** invoke:外部 API 运行状态(是否在跑、实际端口、WS 连接数、错误) */
+  apiStatusGet: "api:status-get",
+  /** 外部 API 配置变更广播 */
+  evApiConfigChanged: "api:config-changed",
+  /** 外部 API 运行状态变更(启停成功/失败、连接数变化) */
+  evApiStatusChanged: "api:status-changed",
 } as const;
 
 export type ChannelName = (typeof CH)[keyof typeof CH];

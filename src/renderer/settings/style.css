@@ -70,15 +70,93 @@ body {
     color: white;
 }
 
-.settings-content {
+/* 左侧菜单 + 内容区 */
+.settings-body {
     flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    scrollbar-width: none;
+    min-height: 0;
+    display: flex;
 }
 
+.settings-nav {
+    width: 148px;
+    flex-shrink: 0;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    overflow-y: auto;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #9ca3af;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e5e7eb;
+}
+
+.nav-item.active {
+    background: rgba(59, 130, 246, 0.18);
+    color: #ffffff;
+}
+
+.nav-icon {
+    width: 18px;
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+.nav-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+/* 自定义滚动条:轨道透明,滑块内缩成细条(与主 UI 同一套观感) */
+.settings-nav::-webkit-scrollbar,
 .settings-content::-webkit-scrollbar {
-    display: none;
+    width: 10px;
+}
+
+.settings-nav::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.settings-nav::-webkit-scrollbar-thumb,
+.settings-content::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    background-color: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+.settings-nav::-webkit-scrollbar-thumb:hover,
+.settings-content::-webkit-scrollbar-thumb:hover,
+.settings-content::-webkit-scrollbar-thumb:active {
+    background-color: rgba(255, 255, 255, 0.3);
 }
 
 .settings-section {
@@ -505,4 +583,141 @@ input:checked + .slider:before {
 
 .btn-preset:active {
     transform: scale(0.96);
+}
+
+/* ========== 外部 API 面板 ========== */
+
+.api-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #d1d5db;
+}
+
+.api-status-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #6b7280;
+}
+
+.api-status-ok .api-status-dot {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.api-status-error .api-status-dot {
+    background: #f87171;
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.6);
+}
+
+.api-status-error .api-status-text {
+    color: #fca5a5;
+}
+
+/* 开关那一列固定宽度,长说明文字换行也不会把开关挤出去 */
+.setting-item.flex-row > label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding-right: 12px;
+}
+
+.api-sub {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #9ca3af;
+}
+
+.api-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    white-space: nowrap;
+}
+
+.api-value {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: #e5e7eb;
+}
+
+.api-note {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #9ca3af;
+}
+
+.api-code {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #cbd5f5;
+    /* 地址是拿来复制的,这里得能选中(全局 * 把 user-select 关掉了) */
+    user-select: text;
+    word-break: break-all;
+}
+
+.api-table {
+    gap: 4px;
+}
+
+.api-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    user-select: text;
+}
+
+.api-method {
+    flex-shrink: 0;
+    width: 38px;
+    padding: 2px 0;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.api-method-get {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+}
+
+.api-method-post {
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+}
+
+.api-method-ws {
+    background: rgba(168, 85, 247, 0.18);
+    color: #c084fc;
+}
+
+.api-path {
+    flex-shrink: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #e5e7eb;
+}
+
+.api-desc {
+    min-width: 0;
+    color: #9ca3af;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

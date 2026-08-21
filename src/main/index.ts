@@ -2,19 +2,29 @@ import { app, ipcMain, screen } from "electron";
 import { createRequire } from "node:module";
 import {
     CH,
+    ExternalApiConfigPatchSchema,
     HookPayloadSchema,
     LyricConfigPatchSchema,
     LyricWindowActionSchema,
     PlayerCommandSchema,
     WindowControlSchema,
     type AppInfo,
+    type ExternalApiStatus,
     type HookPayload,
     type LyricConfig,
     type LyricLineEvent,
     type Rect
 } from "../shared/ipc";
-import { HOOK_MIN_INTERVAL_MS, type CoverTheme } from "../shared/hook-contract";
+import {
+    HOOK_MIN_INTERVAL_MS,
+    type CoverTheme,
+    type LyricsSnapshot,
+    type NowPlaying,
+    type PlaybackSnapshot
+} from "../shared/hook-contract";
 import * as config from "./config";
+import * as apiConfig from "./api-config";
+import * as externalApi from "./external-api";
 import * as windowManager from "./window-manager";
 import * as trayManager from "./tray-manager";
 import * as mediaManager from "./media-manager";
@@ -110,6 +120,7 @@ function setupIPC(): void {
         }
 
         currentSong = { ...currentSong, ...data };
+        broadcastPlaybackEvents(currentSong);
         const lyricWindow = windowManager.getLyricWindow();
 
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
@@ -296,6 +307,23 @@ function setupIPC(): void {
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
     });
 
+    ipcMain.handle(CH.apiConfigGet, () => apiConfig.getConfig());
+
+    ipcMain.handle(CH.apiStatusGet, (): ExternalApiStatus => externalApi.getStatus());
+
+    ipcMain.on(CH.apiConfigSet, (_event, raw: unknown) => {
+        // 与歌词配置同理:必须用 patch schema,缺席字段等于「不改」而非「重置」
+        const parsed = ExternalApiConfigPatchSchema.safeParse(raw);
+        if (!parsed.success) {
+            console.warn(`[ipc] ${CH.apiConfigSet} invalid payload dropped:`, parsed.error.message);
+            return;
+        }
+        const next = apiConfig.saveConfig(parsed.data);
+        // 起/停/换端口都交给 applyConfig 自行比对,这里只管把最新配置喂过去
+        externalApi.applyConfig(next);
+        windowManager.broadcastToLocalWindows(CH.evApiConfigChanged, next);
+    });
+
     ipcMain.on(CH.playerCommand, (_event, raw: unknown) => {
         const parsed = PlayerCommandSchema.safeParse(raw);
         if (!parsed.success) {
@@ -322,6 +350,78 @@ function runPlayerCommand(name: string): void {
     mainWindow.webContents
         .executeJavaScript(`typeof window.${name} === "function" && window.${name}();`)
         .catch(() => {});
+}
+
+/**
+ * 调用 UI 上的带参控制函数(外部 API 用)。
+ * 与 runPlayerCommand 同样先判空:UI 是从远端加载的,老版本没有这些函数。
+ */
+function runPlayerCall(name: string, arg: number): void {
+    const mainWindow = windowManager.getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents
+        .executeJavaScript(`typeof window.${name} === "function" && window.${name}(${arg});`)
+        .catch(() => {});
+}
+
+/**
+ * 现取 UI 侧快照(外部 API 的取数端点)。
+ * 主窗不在、UI 太旧没有该函数、或执行出错,一律回 null → 端点回 501,
+ * 而不是让整个服务失效。
+ */
+async function queryUI<T>(name: string): Promise<T | null> {
+    const mainWindow = windowManager.getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    try {
+        const result: unknown = await mainWindow.webContents.executeJavaScript(
+            `typeof window.${name} === "function" ? window.${name}() : null;`
+        );
+        return (result ?? null) as T | null;
+    } catch (err) {
+        console.warn(`[external-api] ${name} failed:`, err);
+        return null;
+    }
+}
+
+/* ---- WebSocket 事件广播(hook tick 驱动;无连接时 broadcastEvent 直接返回) ---- */
+
+const PROGRESS_EVENT_INTERVAL_MS = 1000;
+let lastEventSongKey = "";
+let lastEventPlaying: boolean | null = null;
+let lastProgressEventTime = 0;
+
+function broadcastPlaybackEvents(song: HookPayload): void {
+    const songKey = String(song.songMid);
+    if (songKey !== lastEventSongKey) {
+        lastEventSongKey = songKey;
+        externalApi.broadcastEvent("track", {
+            id: song.songMid,
+            name: song.songName,
+            artist: song.songArtist,
+            cover: song.coverUrl,
+            duration: Math.round((song.duration || 0) * 1000)
+        });
+    }
+
+    if (song.isPlaying !== lastEventPlaying) {
+        lastEventPlaying = song.isPlaying;
+        externalApi.broadcastEvent("state", {
+            state: song.isPlaying ? "playing" : "paused",
+            position: Math.round((song.currentTime || 0) * 1000),
+            duration: Math.round((song.duration || 0) * 1000)
+        });
+    }
+
+    // hook 每 ~17ms 一次,进度事件按秒节流,避免把连接刷爆
+    const now = Date.now();
+    if (now - lastProgressEventTime >= PROGRESS_EVENT_INTERVAL_MS) {
+        lastProgressEventTime = now;
+        externalApi.broadcastEvent("progress", {
+            position: Math.round((song.currentTime || 0) * 1000),
+            duration: Math.round((song.duration || 0) * 1000),
+            lyricText: song.lyricText
+        });
+    }
 }
 
 function playPrev(): void {
@@ -355,6 +455,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
     windowManager.setQuitting(true);
+    externalApi.stop();
     mediaManager.destroy();
     trayManager.destroyTray();
 });
@@ -375,5 +476,27 @@ app.whenReady().then(() => {
         showWindow: showMainWindow
     });
     setupIPC();
+
+    // 外部 API:配置落盘在独立文件,启动时按开关决定是否起服务
+    apiConfig.loadConfig();
+    externalApi.setStatusListener((status) => {
+        windowManager.broadcastToLocalWindows(CH.evApiStatusChanged, status);
+    });
+    externalApi.init({
+        play: () => runPlayerCommand("$MeTMusic_play"),
+        pause: () => runPlayerCommand("$MeTMusic_pause"),
+        stop: () => runPlayerCommand("$MeTMusic_stop"),
+        next: playNext,
+        prev: playPrev,
+        // 外部接口口径是毫秒,UI 侧 $MeTMusic_seek 收秒
+        seek: (positionMs) => runPlayerCall("$MeTMusic_seek", positionMs / 1000),
+        setVolume: (volume) => runPlayerCall("$MeTMusic_setVolume", volume),
+        getPlaybackState: () => queryUI<PlaybackSnapshot>("$MeTMusic_getState"),
+        getNowPlaying: () => queryUI<NowPlaying>("$MeTMusic_getNowPlaying"),
+        getLyrics: () => queryUI<LyricsSnapshot>("$MeTMusic_getLyrics"),
+        appInfo: () => ({ name: app.getName(), version: app.getVersion() })
+    });
+    externalApi.applyConfig(apiConfig.getConfig());
+
     updater.initUpdater();
 });

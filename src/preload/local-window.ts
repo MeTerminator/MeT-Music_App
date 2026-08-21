@@ -5,6 +5,9 @@ import { CH } from "../shared/channels";
 import type {
     AppInfo,
     DesktopAPI,
+    ExternalApiConfig,
+    ExternalApiConfigPatch,
+    ExternalApiStatus,
     LyricConfig,
     LyricLineEvent,
     LyricWindowAction,
@@ -27,6 +30,8 @@ const api: DesktopAPI = {
     getAppInfo: () => ipcRenderer.invoke(CH.appInfo) as Promise<AppInfo>,
     getLyricBounds: () => ipcRenderer.invoke(CH.lyricBoundsGet) as Promise<Rect>,
     getLyricConfig: () => ipcRenderer.invoke(CH.lyricConfigGet) as Promise<LyricConfig>,
+    getExternalApiConfig: () => ipcRenderer.invoke(CH.apiConfigGet) as Promise<ExternalApiConfig>,
+    getExternalApiStatus: () => ipcRenderer.invoke(CH.apiStatusGet) as Promise<ExternalApiStatus>,
 
     // send
     playerCommand: (action: PlayerCommand["action"]) =>
@@ -35,6 +40,7 @@ const api: DesktopAPI = {
         ipcRenderer.send(CH.windowControl, { action } satisfies WindowControl),
     lyricWindow: (action: LyricWindowAction) => ipcRenderer.send(CH.lyricWindow, action),
     setLyricConfig: (config: Partial<LyricConfig>) => ipcRenderer.send(CH.lyricConfigSet, config),
+    setExternalApiConfig: (config: ExternalApiConfigPatch) => ipcRenderer.send(CH.apiConfigSet, config),
 
     // events
     onLyricChange: (cb) => subscribe<[LyricLineEvent]>(CH.evLyricChange, cb),
@@ -43,7 +49,9 @@ const api: DesktopAPI = {
     onConfigChanged: (cb) => subscribe<[LyricConfig]>(CH.evConfigChanged, cb),
     // payload 为 [width, height](见 ipc.ts evWindowResized 注释)
     onWindowResized: (cb) => subscribe<[[number, number]]>(CH.evWindowResized, ([width, height]) => cb(width, height)),
-    onBoundsChanged: (cb) => subscribe<[Rect]>(CH.evBoundsChanged, cb)
+    onBoundsChanged: (cb) => subscribe<[Rect]>(CH.evBoundsChanged, cb),
+    onExternalApiConfigChanged: (cb) => subscribe<[ExternalApiConfig]>(CH.evApiConfigChanged, cb),
+    onExternalApiStatusChanged: (cb) => subscribe<[ExternalApiStatus]>(CH.evApiStatusChanged, cb)
 };
 
 contextBridge.exposeInMainWorld("desktopAPI", api);

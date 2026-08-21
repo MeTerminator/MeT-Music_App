@@ -21,14 +21,18 @@ export function setOnLyricWindowShow(cb: () => void): void {
     onLyricWindowShow = cb;
 }
 
-/** 把当前完整配置广播给歌词窗与设置窗(evConfigChanged) */
-export function broadcastLyricConfig(): void {
-    const currentConfig = config.getConfig();
+/** 向本地窗口(歌词窗 + 设置窗)广播一条 main → renderer 事件 */
+export function broadcastToLocalWindows(channel: string, payload: unknown): void {
     for (const win of [lyricWindow, settingsWindow]) {
         if (win && !win.isDestroyed()) {
-            win.webContents.send(CH.evConfigChanged, currentConfig);
+            win.webContents.send(channel, payload);
         }
     }
+}
+
+/** 把当前完整配置广播给歌词窗与设置窗(evConfigChanged) */
+export function broadcastLyricConfig(): void {
+    broadcastToLocalWindows(CH.evConfigChanged, config.getConfig());
 }
 
 export function isWaylandSession(): boolean {
@@ -269,7 +273,8 @@ export function createSettingsWindow(): BrowserWindow {
     }
 
     const win = new BrowserWindow({
-        width: 520,
+        // 左侧菜单占掉 148px,内容区仍要放得下滑块 + 数字输入,故比旧版宽一截
+        width: 720,
         height: 720,
         frame: false,
         transparent: true,

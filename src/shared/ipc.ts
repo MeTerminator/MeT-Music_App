@@ -78,6 +78,54 @@ const lyricConfigPatchShape = Object.fromEntries(
 export const LyricConfigPatchSchema = z.object(lyricConfigPatchShape);
 export type LyricConfigPatch = z.infer<typeof LyricConfigPatchSchema>;
 
+/* ========== 外部 API(HTTP / WebSocket)========== */
+
+/**
+ * 外部 API 配置(持久化于 userData/external-api-config.json,与歌词配置分文件存放)。
+ * 语义对齐 SPlayer-Next 的「外部 API」:默认关闭、默认只绑 127.0.0.1、无鉴权;
+ * WebSocket 与 HTTP 共用端口,且必须先开 HTTP 才生效。
+ */
+export const ExternalApiConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  port: z.number().int().min(1).max(65535).default(14558),
+  /** 绑 0.0.0.0(局域网可访问);服务无鉴权,仅建议在可信网络开启 */
+  allowLan: z.boolean().default(false),
+  /** WebSocket(/ws)开关;enabled=false 时无论此值为何都不会起服务 */
+  wsEnabled: z.boolean().default(false),
+});
+export type ExternalApiConfig = z.infer<typeof ExternalApiConfigSchema>;
+export const defaultExternalApiConfig = (): ExternalApiConfig => ExternalApiConfigSchema.parse({});
+
+/** 补丁 schema:缺席=不改(理由同 LyricConfigPatchSchema,Zod 4 的 .partial() 不挡 default) */
+type ExternalApiConfigPatchShape = {
+  [K in keyof ExternalApiConfig]: z.ZodOptional<z.ZodType<ExternalApiConfig[K]>>;
+};
+
+const externalApiConfigPatchShape = Object.fromEntries(
+  Object.entries(ExternalApiConfigSchema.shape).map(([key, schema]) => [
+    key,
+    schema.unwrap().optional(),
+  ]),
+) as unknown as ExternalApiConfigPatchShape;
+
+export const ExternalApiConfigPatchSchema = z.object(externalApiConfigPatchShape);
+export type ExternalApiConfigPatch = z.infer<typeof ExternalApiConfigPatchSchema>;
+
+/** 外部 API 运行状态(设置窗展示用;由 main 在启停/连接数变化时广播) */
+export interface ExternalApiStatus {
+  running: boolean;
+  /** 实际监听端口(未运行时回显配置值) */
+  port: number;
+  /** 实际绑定地址:127.0.0.1 或 0.0.0.0 */
+  host: string;
+  /** 开启局域网访问且拿得到网卡地址时,给出局域网可用的 IPv4;否则为 null */
+  lanAddress: string | null;
+  /** 当前 WebSocket 连接数 */
+  wsClients: number;
+  /** 最近一次启动失败原因(端口占用等);正常时为 null */
+  error: string | null;
+}
+
 export const PlayerCommandSchema = z.object({
   action: z.enum(["prev", "next", "playOrPause"]),
 });
@@ -161,11 +209,14 @@ export interface DesktopAPI {
   getAppInfo(): Promise<AppInfo>;
   getLyricBounds(): Promise<Rect>;
   getLyricConfig(): Promise<LyricConfig>;
+  getExternalApiConfig(): Promise<ExternalApiConfig>;
+  getExternalApiStatus(): Promise<ExternalApiStatus>;
   // send
   playerCommand(action: PlayerCommand["action"]): void;
   windowControl(action: WindowControl["action"]): void;
   lyricWindow(action: LyricWindowAction): void;
   setLyricConfig(config: Partial<LyricConfig>): void;
+  setExternalApiConfig(config: ExternalApiConfigPatch): void;
   // events(返回取消订阅函数)
   onLyricChange(cb: (data: LyricLineEvent) => void): () => void;
   onSongChange(cb: (label: string) => void): () => void;
@@ -173,6 +224,8 @@ export interface DesktopAPI {
   onConfigChanged(cb: (config: LyricConfig) => void): () => void;
   onWindowResized(cb: (width: number, height: number) => void): () => void;
   onBoundsChanged(cb: (bounds: Rect) => void): () => void;
+  onExternalApiConfigChanged(cb: (config: ExternalApiConfig) => void): () => void;
+  onExternalApiStatusChanged(cb: (status: ExternalApiStatus) => void): () => void;
 }
 
 declare global {

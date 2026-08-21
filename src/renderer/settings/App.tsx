@@ -3,6 +3,7 @@ import type React from "react";
 import { defaultLyricConfig, type LyricConfig } from "@shared/ipc";
 import { hexToRgba, rgbToHex } from "@renderer/shared/color";
 import { FontSelect, NumberInput, Switch, type FeaturedFont } from "./components";
+import ExternalApiPanel from "./ExternalApiPanel";
 
 /* ========== 常量 ========== */
 
@@ -14,6 +15,21 @@ const FEATURED_FONTS: readonly FeaturedFont[] = [
 ];
 
 const MOVE_STEPS = [1, 10, 50] as const;
+
+/**
+ * 左侧菜单分组。
+ * 原先所有分区堆在一列里滚,加进外部 API 之后长得没法看;
+ * 改成左菜单切换,每次只渲染当前组(切组即回到顶部,不必记滚动位置)。
+ */
+const PANES = [
+  { id: "font", label: "字体", icon: "Aa" },
+  { id: "color", label: "颜色与描边", icon: "◐" },
+  { id: "background", label: "背景与特效", icon: "▨" },
+  { id: "layout", label: "窗口与位置", icon: "⊹" },
+  { id: "misc", label: "其他选项", icon: "⋯" },
+  { id: "api", label: "外部 API", icon: "⇄" },
+] as const;
+type PaneId = (typeof PANES)[number]["id"];
 
 /* ========== 工具函数 ========== */
 
@@ -99,6 +115,9 @@ export default function App(): React.JSX.Element {
   const geometryRef = useRef(geometry);
   screenRef.current = screenSize;
   geometryRef.current = geometry;
+
+  /* ---- 左侧菜单(当前分组) ---- */
+  const [activePane, setActivePane] = useState<PaneId>("font");
 
   /* ---- 位移微调 / 拖动面板 ---- */
   const [moveStep, setMoveStep] = useState<number>(10);
@@ -393,445 +412,490 @@ export default function App(): React.JSX.Element {
     <div className="settings-container">
       {/* Title Bar */}
       <header className="title-bar">
-        <span className="title">桌面歌词设置</span>
+        <span className="title">MeT-Music 设置</span>
         <div className="close-btn" onClick={closeSettings} title="关闭">
           ×
         </div>
       </header>
 
-      {/* Main Form(初始配置加载完成前禁交互,防止把默认值当作用户改动提交) */}
-      <main
-        className="settings-content"
-        aria-busy={!loaded}
-        style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}
-      >
-        {/* Fonts */}
-        <section className="settings-section">
-          <h3>字体</h3>
-          <div className="setting-item">
-            <label>歌词字体</label>
-            <FontSelect
-              value={config.lyricFontFamily}
-              featuredFonts={FEATURED_FONTS}
-              systemFonts={systemFonts}
-              onChange={(value) => patchConfig({ lyricFontFamily: value })}
-            />
-            {fontLoadError && (
-              <input
-                type="text"
-                className="text-input"
-                placeholder="手动输入字体名称"
-                value={config.lyricFontFamily}
-                onChange={(e) => patchConfig({ lyricFontFamily: e.target.value })}
-              />
-            )}
-            <label>歌词字重：{config.lyricFontWeight}</label>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={100}
-                max={900}
-                step={10}
-                value={config.lyricFontWeight}
-                onChange={(e) => patchConfig({ lyricFontWeight: e.currentTarget.valueAsNumber })}
-              />
-              <NumberInput
-                value={config.lyricFontWeight}
-                min={100}
-                max={900}
-                step={10}
-                onCommit={(value) => patchConfig({ lyricFontWeight: value })}
-              />
-            </div>
-          </div>
-          <div className="setting-item">
-            <label>翻译字体</label>
-            <FontSelect
-              value={config.translationFontFamily}
-              featuredFonts={FEATURED_FONTS}
-              systemFonts={systemFonts}
-              onChange={(value) => patchConfig({ translationFontFamily: value })}
-            />
-            {fontLoadError && (
-              <input
-                type="text"
-                className="text-input"
-                placeholder="手动输入字体名称"
-                value={config.translationFontFamily}
-                onChange={(e) => patchConfig({ translationFontFamily: e.target.value })}
-              />
-            )}
-            <label>翻译字重：{config.translationFontWeight}</label>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={100}
-                max={900}
-                step={10}
-                value={config.translationFontWeight}
-                onChange={(e) =>
-                  patchConfig({ translationFontWeight: e.currentTarget.valueAsNumber })
-                }
-              />
-              <NumberInput
-                value={config.translationFontWeight}
-                min={100}
-                max={900}
-                step={10}
-                onCommit={(value) => patchConfig({ translationFontWeight: value })}
-              />
-            </div>
-          </div>
-          {fontLoadError && <p className="font-status">{fontLoadError}</p>}
-          <p className="font-license-note">
-            本应用内置使用 HarmonyOS Sans（© Huawei Device Co., Ltd.），许可协议随字体文件一并分发。
-          </p>
-        </section>
-
-        {/* Window Size */}
-        <section className="settings-section">
-          <h3>窗口尺寸</h3>
-          <div className="setting-item">
-            <label>歌词窗口宽度：{geometry.w} px</label>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={100}
-                max={Math.max(100, screenSize.width)}
-                value={geometry.w}
-                onChange={(e) => updateWindowSize(e.currentTarget.valueAsNumber, geometry.h)}
-              />
-              <NumberInput
-                value={geometry.w}
-                min={100}
-                max={Math.max(100, screenSize.width)}
-                onCommit={(value) => updateWindowSize(value, geometryRef.current.h)}
-              />
-            </div>
-          </div>
-          <div className="setting-item">
-            <label>歌词窗口高度：{geometry.h} px</label>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={50}
-                max={Math.max(50, screenSize.height)}
-                value={geometry.h}
-                onChange={(e) => updateWindowSize(geometry.w, e.currentTarget.valueAsNumber)}
-              />
-              <NumberInput
-                value={geometry.h}
-                min={50}
-                max={Math.max(50, screenSize.height)}
-                onCommit={(value) => updateWindowSize(geometryRef.current.w, value)}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Colors */}
-        <section className="settings-section">
-          <h3>歌词颜色</h3>
-          <div className="setting-item flex-row">
-            <label>常规字体颜色</label>
-            <input
-              type="color"
-              value={config.textColor}
-              onChange={(e) => patchConfig({ textColor: e.target.value })}
-            />
-          </div>
-          <div className="setting-item">
-            <label>常规字体不透明度 ({config.textOpacity}%)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={config.textOpacity}
-                onChange={(e) => patchConfig({ textOpacity: e.currentTarget.valueAsNumber })}
-              />
-            </div>
-          </div>
-          <div className="setting-item flex-row">
-            <label>填充颜色使用歌曲主题色</label>
-            <Switch
-              checked={config.useThemeColorForActive}
-              onChange={(value) => patchConfig({ useThemeColorForActive: value })}
-            />
-          </div>
-          {!config.useThemeColorForActive && (
-            <div className="setting-item flex-row">
-              <label>KTV 填充颜色</label>
-              <input
-                type="color"
-                value={config.colorActive}
-                onChange={(e) => patchConfig({ colorActive: e.target.value })}
-              />
-            </div>
-          )}
-          <div className="setting-item flex-row">
-            <label>KTV 底色颜色</label>
-            <input
-              type="color"
-              value={inactiveColorHex}
-              onChange={(e) => updateInactiveColor(e.target.value, inactiveOpacity)}
-            />
-          </div>
-          <div className="setting-item">
-            <label>KTV 底色不透明度 ({inactiveOpacity}%)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={inactiveOpacity}
-                onChange={(e) => updateInactiveColor(inactiveColorHex, e.currentTarget.valueAsNumber)}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Text Stroke */}
-        <section className="settings-section">
-          <h3>文字描边</h3>
-          <div className="setting-item">
-            <label>描边粗细 ({config.strokeWidth}px)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={0}
-                max={8}
-                value={config.strokeWidth}
-                onChange={(e) => patchConfig({ strokeWidth: e.currentTarget.valueAsNumber })}
-              />
-            </div>
-          </div>
-          <div className="setting-item flex-row">
-            <label>描边颜色</label>
-            <input
-              type="color"
-              value={config.strokeColor}
-              onChange={(e) => patchConfig({ strokeColor: e.target.value })}
-            />
-          </div>
-        </section>
-
-        {/* Window Styles */}
-        <section className="settings-section">
-          <h3>背景与特效</h3>
-          <div className="setting-item flex-row">
-            <label>悬停背景色</label>
-            <input
-              type="color"
-              value={bgColorHex}
-              onChange={(e) => updateBgColor(e.target.value)}
-            />
-          </div>
-          <div className="setting-item">
-            <label>悬停模糊度 ({config.bgBlur}px)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={0}
-                max={30}
-                value={config.bgBlur}
-                onChange={(e) => patchConfig({ bgBlur: e.currentTarget.valueAsNumber })}
-              />
-            </div>
-          </div>
-          <div className="setting-item">
-            <label>总体不透明度 ({config.overallOpacity}%)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={10}
-                max={100}
-                value={config.overallOpacity}
-                onChange={(e) => patchConfig({ overallOpacity: e.currentTarget.valueAsNumber })}
-              />
-            </div>
-          </div>
-          <div className="setting-item">
-            <label>暂停时不透明度 ({config.pausedOpacity}%)</label>
-            <div className="range-wrapper">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={config.pausedOpacity}
-                onChange={(e) => patchConfig({ pausedOpacity: e.currentTarget.valueAsNumber })}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Position & Offset Control Module */}
-        <section className="settings-section">
-          <h3>位置与位移控制</h3>
-
-          {/* Visual Interactive Drag Pad */}
-          <div className="setting-item drag-pad-container">
-            <div className="pad-header">
-              <label>位移拖动面板 (拖拽圆点调位置)</label>
-              <span className="screen-info">
-                屏幕: {screenSize.width} × {screenSize.height}
+      {/* 左侧菜单 + 内容区 */}
+      <div className="settings-body">
+        <nav className="settings-nav">
+          {PANES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-item${activePane === item.id ? " active" : ""}`}
+              onClick={() => setActivePane(item.id)}
+            >
+              <span className="nav-icon" aria-hidden>
+                {item.icon}
               </span>
-            </div>
-            <div className="drag-pad-wrapper" ref={padRef} onMouseDown={onPadMouseDown}>
-              <div className="drag-pad-screen">
-                <div className="drag-pad-handle" style={padHandleStyle}>
-                  <span className="handle-pulse"></span>
-                  <span className="handle-label">歌词</span>
+              <span className="nav-label">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <main className="settings-content">
+          {/* 歌词相关分组:初始配置加载完成前禁交互,防止把默认值当作用户改动提交
+              (外部 API 面板自带一套加载态,不受这里的封锁影响)。
+              整块随「外部 API」组隐藏 —— 否则底部那排歌词动作按钮会跑到
+              外部 API 面板上方,看着像是这一组的按钮。 */}
+          {activePane !== "api" && (
+            <div
+              aria-busy={!loaded}
+              style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}
+            >
+            {activePane === "font" && (
+              <>
+            {/* Fonts */}
+            <section className="settings-section">
+              <h3>字体</h3>
+              <div className="setting-item">
+                <label>歌词字体</label>
+                <FontSelect
+                  value={config.lyricFontFamily}
+                  featuredFonts={FEATURED_FONTS}
+                  systemFonts={systemFonts}
+                  onChange={(value) => patchConfig({ lyricFontFamily: value })}
+                />
+                {fontLoadError && (
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="手动输入字体名称"
+                    value={config.lyricFontFamily}
+                    onChange={(e) => patchConfig({ lyricFontFamily: e.target.value })}
+                  />
+                )}
+                <label>歌词字重：{config.lyricFontWeight}</label>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={100}
+                    max={900}
+                    step={10}
+                    value={config.lyricFontWeight}
+                    onChange={(e) => patchConfig({ lyricFontWeight: e.currentTarget.valueAsNumber })}
+                  />
+                  <NumberInput
+                    value={config.lyricFontWeight}
+                    min={100}
+                    max={900}
+                    step={10}
+                    onCommit={(value) => patchConfig({ lyricFontWeight: value })}
+                  />
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Step / Directional Controller */}
-          <div className="setting-item flex-col">
-            <div className="step-header">
-              <label>方向微调位移</label>
-              <div className="step-selector">
-                {MOVE_STEPS.map((step) => (
-                  <button
-                    key={step}
-                    className={`step-btn${moveStep === step ? " active" : ""}`}
-                    onClick={() => setMoveStep(step)}
-                  >
-                    {step}px
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="dpad-grid">
-              <div></div>
-              <button className="dpad-btn" onClick={() => moveOffset(0, -moveStep)} title="向上移动">
-                ▲
-              </button>
-              <div></div>
-              <button className="dpad-btn" onClick={() => moveOffset(-moveStep, 0)} title="向左移动">
-                ◄
-              </button>
-              <button
-                className="dpad-btn dpad-center"
-                onClick={() => alignPosition("center")}
-                title="屏幕中央"
-              >
-                ●
-              </button>
-              <button className="dpad-btn" onClick={() => moveOffset(moveStep, 0)} title="向右移动">
-                ►
-              </button>
-              <div></div>
-              <button className="dpad-btn" onClick={() => moveOffset(0, moveStep)} title="向下移动">
-                ▼
-              </button>
-              <div></div>
-            </div>
-          </div>
-
-          {/* Numeric Position Inputs & Sliders */}
-          <div className="setting-item">
-            <div className="coord-label-row">
-              <label>X 轴位置 (水平): {geometry.x} px</label>
-            </div>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={0}
-                max={Math.max(1, screenSize.width - geometry.w)}
-                value={geometry.x}
-                onChange={(e) => updatePosition(e.currentTarget.valueAsNumber, geometry.y)}
-              />
-              <NumberInput
-                value={geometry.x}
-                onCommit={(value) => updatePosition(value, geometryRef.current.y)}
-              />
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <div className="coord-label-row">
-              <label>Y 轴位置 (垂直): {geometry.y} px</label>
-            </div>
-            <div className="range-wrapper flex-row-gap">
-              <input
-                type="range"
-                min={0}
-                max={Math.max(1, screenSize.height - geometry.h)}
-                value={geometry.y}
-                onChange={(e) => updatePosition(geometry.x, e.currentTarget.valueAsNumber)}
-              />
-              <NumberInput
-                value={geometry.y}
-                onCommit={(value) => updatePosition(geometryRef.current.x, value)}
-              />
-            </div>
-          </div>
-
-          {/* Preset Quick Buttons */}
-          <div className="setting-item flex-col">
-            <label>快捷位置预设</label>
-            <div className="preset-btn-row">
-              <button className="btn btn-preset" onClick={() => alignPosition("top-center")}>
-                顶部居中
-              </button>
-              <button className="btn btn-preset" onClick={() => alignPosition("bottom-center")}>
-                底部居中
-              </button>
-              <button className="btn btn-preset" onClick={() => alignPosition("center")}>
-                屏幕中央
-              </button>
-              <button className="btn btn-preset" onClick={() => alignPosition("left")}>
-                靠左
-              </button>
-              <button className="btn btn-preset" onClick={() => alignPosition("right")}>
-                靠右
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Switches */}
-        <section className="settings-section">
-          <h3>其他选项</h3>
-          <div className="setting-item flex-row">
-            <label>显示歌词翻译</label>
-            <Switch
-              checked={config.showTranslation}
-              onChange={(value) => patchConfig({ showTranslation: value })}
-            />
-          </div>
-          {config.showTranslation && (
-            <div className="setting-item">
-              <label>翻译字体大小比例 ({config.transFontSizeScale}%)</label>
-              <div className="range-wrapper">
-                <input
-                  type="range"
-                  min={15}
-                  max={50}
-                  value={config.transFontSizeScale}
-                  onChange={(e) => patchConfig({ transFontSizeScale: e.currentTarget.valueAsNumber })}
+              <div className="setting-item">
+                <label>翻译字体</label>
+                <FontSelect
+                  value={config.translationFontFamily}
+                  featuredFonts={FEATURED_FONTS}
+                  systemFonts={systemFonts}
+                  onChange={(value) => patchConfig({ translationFontFamily: value })}
                 />
+                {fontLoadError && (
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="手动输入字体名称"
+                    value={config.translationFontFamily}
+                    onChange={(e) => patchConfig({ translationFontFamily: e.target.value })}
+                  />
+                )}
+                <label>翻译字重：{config.translationFontWeight}</label>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={100}
+                    max={900}
+                    step={10}
+                    value={config.translationFontWeight}
+                    onChange={(e) =>
+                      patchConfig({ translationFontWeight: e.currentTarget.valueAsNumber })
+                    }
+                  />
+                  <NumberInput
+                    value={config.translationFontWeight}
+                    min={100}
+                    max={900}
+                    step={10}
+                    onCommit={(value) => patchConfig({ translationFontWeight: value })}
+                  />
+                </div>
+              </div>
+              {fontLoadError && <p className="font-status">{fontLoadError}</p>}
+              <p className="font-license-note">
+                本应用内置使用 HarmonyOS Sans（© Huawei Device Co., Ltd.），许可协议随字体文件一并分发。
+              </p>
+            </section>
+              </>
+            )}
+            {activePane === "color" && (
+              <>
+            {/* Colors */}
+            <section className="settings-section">
+              <h3>歌词颜色</h3>
+              <div className="setting-item flex-row">
+                <label>常规字体颜色</label>
+                <input
+                  type="color"
+                  value={config.textColor}
+                  onChange={(e) => patchConfig({ textColor: e.target.value })}
+                />
+              </div>
+              <div className="setting-item">
+                <label>常规字体不透明度 ({config.textOpacity}%)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={config.textOpacity}
+                    onChange={(e) => patchConfig({ textOpacity: e.currentTarget.valueAsNumber })}
+                  />
+                </div>
+              </div>
+              <div className="setting-item flex-row">
+                <label>填充颜色使用歌曲主题色</label>
+                <Switch
+                  checked={config.useThemeColorForActive}
+                  onChange={(value) => patchConfig({ useThemeColorForActive: value })}
+                />
+              </div>
+              {!config.useThemeColorForActive && (
+                <div className="setting-item flex-row">
+                  <label>KTV 填充颜色</label>
+                  <input
+                    type="color"
+                    value={config.colorActive}
+                    onChange={(e) => patchConfig({ colorActive: e.target.value })}
+                  />
+                </div>
+              )}
+              <div className="setting-item flex-row">
+                <label>KTV 底色颜色</label>
+                <input
+                  type="color"
+                  value={inactiveColorHex}
+                  onChange={(e) => updateInactiveColor(e.target.value, inactiveOpacity)}
+                />
+              </div>
+              <div className="setting-item">
+                <label>KTV 底色不透明度 ({inactiveOpacity}%)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={inactiveOpacity}
+                    onChange={(e) => updateInactiveColor(inactiveColorHex, e.currentTarget.valueAsNumber)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Text Stroke */}
+            <section className="settings-section">
+              <h3>文字描边</h3>
+              <div className="setting-item">
+                <label>描边粗细 ({config.strokeWidth}px)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={0}
+                    max={8}
+                    value={config.strokeWidth}
+                    onChange={(e) => patchConfig({ strokeWidth: e.currentTarget.valueAsNumber })}
+                  />
+                </div>
+              </div>
+              <div className="setting-item flex-row">
+                <label>描边颜色</label>
+                <input
+                  type="color"
+                  value={config.strokeColor}
+                  onChange={(e) => patchConfig({ strokeColor: e.target.value })}
+                />
+              </div>
+            </section>
+              </>
+            )}
+            {activePane === "background" && (
+              <>
+            {/* Window Styles */}
+            <section className="settings-section">
+              <h3>背景与特效</h3>
+              <div className="setting-item flex-row">
+                <label>悬停背景色</label>
+                <input
+                  type="color"
+                  value={bgColorHex}
+                  onChange={(e) => updateBgColor(e.target.value)}
+                />
+              </div>
+              <div className="setting-item">
+                <label>悬停模糊度 ({config.bgBlur}px)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={0}
+                    max={30}
+                    value={config.bgBlur}
+                    onChange={(e) => patchConfig({ bgBlur: e.currentTarget.valueAsNumber })}
+                  />
+                </div>
+              </div>
+              <div className="setting-item">
+                <label>总体不透明度 ({config.overallOpacity}%)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    value={config.overallOpacity}
+                    onChange={(e) => patchConfig({ overallOpacity: e.currentTarget.valueAsNumber })}
+                  />
+                </div>
+              </div>
+              <div className="setting-item">
+                <label>暂停时不透明度 ({config.pausedOpacity}%)</label>
+                <div className="range-wrapper">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={config.pausedOpacity}
+                    onChange={(e) => patchConfig({ pausedOpacity: e.currentTarget.valueAsNumber })}
+                  />
+                </div>
+              </div>
+            </section>
+              </>
+            )}
+            {activePane === "layout" && (
+              <>
+            {/* Window Size */}
+            <section className="settings-section">
+              <h3>窗口尺寸</h3>
+              <div className="setting-item">
+                <label>歌词窗口宽度：{geometry.w} px</label>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={100}
+                    max={Math.max(100, screenSize.width)}
+                    value={geometry.w}
+                    onChange={(e) => updateWindowSize(e.currentTarget.valueAsNumber, geometry.h)}
+                  />
+                  <NumberInput
+                    value={geometry.w}
+                    min={100}
+                    max={Math.max(100, screenSize.width)}
+                    onCommit={(value) => updateWindowSize(value, geometryRef.current.h)}
+                  />
+                </div>
+              </div>
+              <div className="setting-item">
+                <label>歌词窗口高度：{geometry.h} px</label>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={50}
+                    max={Math.max(50, screenSize.height)}
+                    value={geometry.h}
+                    onChange={(e) => updateWindowSize(geometry.w, e.currentTarget.valueAsNumber)}
+                  />
+                  <NumberInput
+                    value={geometry.h}
+                    min={50}
+                    max={Math.max(50, screenSize.height)}
+                    onCommit={(value) => updateWindowSize(geometryRef.current.w, value)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Position & Offset Control Module */}
+            <section className="settings-section">
+              <h3>位置与位移控制</h3>
+
+              {/* Visual Interactive Drag Pad */}
+              <div className="setting-item drag-pad-container">
+                <div className="pad-header">
+                  <label>位移拖动面板 (拖拽圆点调位置)</label>
+                  <span className="screen-info">
+                    屏幕: {screenSize.width} × {screenSize.height}
+                  </span>
+                </div>
+                <div className="drag-pad-wrapper" ref={padRef} onMouseDown={onPadMouseDown}>
+                  <div className="drag-pad-screen">
+                    <div className="drag-pad-handle" style={padHandleStyle}>
+                      <span className="handle-pulse"></span>
+                      <span className="handle-label">歌词</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step / Directional Controller */}
+              <div className="setting-item flex-col">
+                <div className="step-header">
+                  <label>方向微调位移</label>
+                  <div className="step-selector">
+                    {MOVE_STEPS.map((step) => (
+                      <button
+                        key={step}
+                        className={`step-btn${moveStep === step ? " active" : ""}`}
+                        onClick={() => setMoveStep(step)}
+                      >
+                        {step}px
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="dpad-grid">
+                  <div></div>
+                  <button className="dpad-btn" onClick={() => moveOffset(0, -moveStep)} title="向上移动">
+                    ▲
+                  </button>
+                  <div></div>
+                  <button className="dpad-btn" onClick={() => moveOffset(-moveStep, 0)} title="向左移动">
+                    ◄
+                  </button>
+                  <button
+                    className="dpad-btn dpad-center"
+                    onClick={() => alignPosition("center")}
+                    title="屏幕中央"
+                  >
+                    ●
+                  </button>
+                  <button className="dpad-btn" onClick={() => moveOffset(moveStep, 0)} title="向右移动">
+                    ►
+                  </button>
+                  <div></div>
+                  <button className="dpad-btn" onClick={() => moveOffset(0, moveStep)} title="向下移动">
+                    ▼
+                  </button>
+                  <div></div>
+                </div>
+              </div>
+
+              {/* Numeric Position Inputs & Sliders */}
+              <div className="setting-item">
+                <div className="coord-label-row">
+                  <label>X 轴位置 (水平): {geometry.x} px</label>
+                </div>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1, screenSize.width - geometry.w)}
+                    value={geometry.x}
+                    onChange={(e) => updatePosition(e.currentTarget.valueAsNumber, geometry.y)}
+                  />
+                  <NumberInput
+                    value={geometry.x}
+                    onCommit={(value) => updatePosition(value, geometryRef.current.y)}
+                  />
+                </div>
+              </div>
+
+              <div className="setting-item">
+                <div className="coord-label-row">
+                  <label>Y 轴位置 (垂直): {geometry.y} px</label>
+                </div>
+                <div className="range-wrapper flex-row-gap">
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1, screenSize.height - geometry.h)}
+                    value={geometry.y}
+                    onChange={(e) => updatePosition(geometry.x, e.currentTarget.valueAsNumber)}
+                  />
+                  <NumberInput
+                    value={geometry.y}
+                    onCommit={(value) => updatePosition(geometryRef.current.x, value)}
+                  />
+                </div>
+              </div>
+
+              {/* Preset Quick Buttons */}
+              <div className="setting-item flex-col">
+                <label>快捷位置预设</label>
+                <div className="preset-btn-row">
+                  <button className="btn btn-preset" onClick={() => alignPosition("top-center")}>
+                    顶部居中
+                  </button>
+                  <button className="btn btn-preset" onClick={() => alignPosition("bottom-center")}>
+                    底部居中
+                  </button>
+                  <button className="btn btn-preset" onClick={() => alignPosition("center")}>
+                    屏幕中央
+                  </button>
+                  <button className="btn btn-preset" onClick={() => alignPosition("left")}>
+                    靠左
+                  </button>
+                  <button className="btn btn-preset" onClick={() => alignPosition("right")}>
+                    靠右
+                  </button>
+                </div>
+              </div>
+            </section>
+              </>
+            )}
+            {activePane === "misc" && (
+              <>
+            {/* Switches */}
+            <section className="settings-section">
+              <h3>其他选项</h3>
+              <div className="setting-item flex-row">
+                <label>显示歌词翻译</label>
+                <Switch
+                  checked={config.showTranslation}
+                  onChange={(value) => patchConfig({ showTranslation: value })}
+                />
+              </div>
+              {config.showTranslation && (
+                <div className="setting-item">
+                  <label>翻译字体大小比例 ({config.transFontSizeScale}%)</label>
+                  <div className="range-wrapper">
+                    <input
+                      type="range"
+                      min={15}
+                      max={50}
+                      value={config.transFontSizeScale}
+                      onChange={(e) => patchConfig({ transFontSizeScale: e.currentTarget.valueAsNumber })}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="setting-item flex-row">
+                <label>锁定桌面歌词</label>
+                <Switch checked={config.isLock} onChange={(value) => patchConfig({ isLock: value })} />
+              </div>
+            </section>
+              </>
+            )}
+              {/* Actions:「重置位置」只在窗口与位置组露出;
+                  「恢复默认」恢复的是全部歌词外观(不含窗口几何),各组都留着 */}
+              <div className="action-row">
+                {activePane === "layout" && (
+                  <button className="btn btn-secondary" onClick={resetLyricPosition}>
+                    重置位置
+                  </button>
+                )}
+                <button className="btn btn-secondary" onClick={resetConfig}>
+                  恢复默认
+                </button>
               </div>
             </div>
           )}
-          <div className="setting-item flex-row">
-            <label>锁定桌面歌词</label>
-            <Switch checked={config.isLock} onChange={(value) => patchConfig({ isLock: value })} />
-          </div>
-        </section>
 
-        {/* Actions */}
-        <div className="action-row">
-          <button className="btn btn-secondary" onClick={resetLyricPosition}>
-            重置位置
-          </button>
-          <button className="btn btn-secondary" onClick={resetConfig}>
-            恢复默认
-          </button>
-        </div>
-      </main>
+          {activePane === "api" && <ExternalApiPanel />}
+        </main>
+      </div>
     </div>
   );
 }

@@ -49,6 +49,41 @@ pnpm start
 * **系统级控制**：支持媒体键控制（播放/暂停、上一曲、下一曲）及系统通知。
 * **托盘管理**：最小化到系统托盘，后台持续播放。
 * **快捷键**：支持全局快捷键操作，无需切回窗口即可控制音乐。
+* **外部 API**：可选的本地 HTTP / WebSocket 接口，供外部程序查询播放状态与控制播放。
+
+## 外部 API
+
+设置窗口 → **外部 API** 中开启（默认关闭）。服务默认仅绑定 `127.0.0.1`、**不含任何鉴权**；
+需要局域网访问时请显式开启「允许局域网访问」，并仅在可信网络中使用。
+
+* 基础路径：`http://127.0.0.1:<port>/api`，默认端口 `14558`
+* 数据格式：请求与响应均为 JSON，时间单位为毫秒
+* 成功响应：控制类接口返回 `{ "ok": true }`；参数非法返回 `400`
+* 播放器尚未就绪（主窗未加载/UI 版本过旧）时，取数类接口返回 `501`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/info` | 应用与连接信息 |
+| GET | `/api/status` | 播放状态 |
+| GET | `/api/volume` | 当前音量 |
+| GET | `/api/now-playing` | 不含完整歌词的轻量快照 |
+| GET | `/api/lyrics` | 当前曲目的完整解析歌词 |
+| POST | `/api/play` `/api/pause` `/api/stop` | 播放 / 暂停 / 停止 |
+| POST | `/api/next` `/api/prev` | 下一曲 / 上一曲 |
+| POST | `/api/seek` | 跳转，body `{ "positionMs": number }` |
+| POST | `/api/volume` | 设置音量，body `{ "volume": 0~1 }` |
+
+WebSocket 需在外部 API 之上额外开启，地址 `ws://127.0.0.1:<port>/ws`（与 HTTP 同端口）：
+
+* 下行消息带 `kind` 字段：`hello`（连接建立，附连接数）、`event`（播放事件推送）、`ack`（命令成功）、`error`（命令失败）
+* 上行命令统一用 `op` 标识：`play` / `pause` / `stop` / `next` / `prev`、
+  `seek`（附 `positionMs`）、`setVolume`（附 `volume`）
+
+```bash
+curl http://127.0.0.1:14558/api/status
+curl -X POST http://127.0.0.1:14558/api/seek \
+  -H "Content-Type: application/json" -d '{ "positionMs": 60000 }'
+```
 
 
 ## 技术栈
