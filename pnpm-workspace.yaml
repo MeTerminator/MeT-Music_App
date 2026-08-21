@@ -1,8 +1,6 @@
 allowBuilds:
   electron: true
   electron-winstaller: true
-ignoredBuiltDependencies:
-  - electron
-  - electron-winstaller
+  esbuild: true
 minimumReleaseAgeExclude:
   - electron@43.4.1

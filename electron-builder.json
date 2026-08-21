@@ -5,11 +5,16 @@
     "output": "dist"
   },
   "files": [
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/renderer/**/*",
+    "out/**/*",
     "public/**/*",
     "package.json"
+  ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "MeTerminator",
+      "repo": "MeT-Music_App"
+    }
   ],
   "mac": {
     "icon": "public/icons/icon.icns",

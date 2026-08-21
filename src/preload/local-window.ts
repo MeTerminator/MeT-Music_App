@@ -1,0 +1,49 @@
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+// 通道名来自零依赖的 channels.ts(运行时安全,打包时内联);
+// 契约类型(含 zod 的 ipc.ts)仅 type-only 引用。
+import { CH } from "../shared/channels";
+import type {
+    AppInfo,
+    DesktopAPI,
+    LyricConfig,
+    LyricLineEvent,
+    LyricWindowAction,
+    PlayerCommand,
+    Rect,
+    WindowControl
+} from "../shared/ipc";
+
+/** 订阅 main → 渲染进程事件,返回取消订阅函数 */
+function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
+    const listener = (_event: IpcRendererEvent, ...args: unknown[]) => cb(...(args as T));
+    ipcRenderer.on(channel, listener);
+    return () => {
+        ipcRenderer.removeListener(channel, listener);
+    };
+}
+
+const api: DesktopAPI = {
+    // invoke
+    getAppInfo: () => ipcRenderer.invoke(CH.appInfo) as Promise<AppInfo>,
+    getLyricBounds: () => ipcRenderer.invoke(CH.lyricBoundsGet) as Promise<Rect>,
+    getLyricConfig: () => ipcRenderer.invoke(CH.lyricConfigGet) as Promise<LyricConfig>,
+
+    // send
+    playerCommand: (action: PlayerCommand["action"]) =>
+        ipcRenderer.send(CH.playerCommand, { action } satisfies PlayerCommand),
+    windowControl: (action: WindowControl["action"]) =>
+        ipcRenderer.send(CH.windowControl, { action } satisfies WindowControl),
+    lyricWindow: (action: LyricWindowAction) => ipcRenderer.send(CH.lyricWindow, action),
+    setLyricConfig: (config: Partial<LyricConfig>) => ipcRenderer.send(CH.lyricConfigSet, config),
+
+    // events
+    onLyricChange: (cb) => subscribe<[LyricLineEvent]>(CH.evLyricChange, cb),
+    onSongChange: (cb) => subscribe<[string]>(CH.evSongChange, cb),
+    onStatusChange: (cb) => subscribe<[boolean]>(CH.evStatusChange, cb),
+    onConfigChanged: (cb) => subscribe<[LyricConfig]>(CH.evConfigChanged, cb),
+    // payload 为 [width, height](见 ipc.ts evWindowResized 注释)
+    onWindowResized: (cb) => subscribe<[[number, number]]>(CH.evWindowResized, ([width, height]) => cb(width, height)),
+    onBoundsChanged: (cb) => subscribe<[Rect]>(CH.evBoundsChanged, cb)
+};
+
+contextBridge.exposeInMainWorld("desktopAPI", api);
