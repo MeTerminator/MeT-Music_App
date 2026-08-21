@@ -10,7 +10,7 @@ let isQuiting = false;
 let lyricWindowVisible = true;
 
 const DEFAULT_LYRIC_WIDTH = 1200;
-const DEFAULT_LYRIC_HEIGHT = 130;
+const DEFAULT_LYRIC_HEIGHT = 100;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 let saveLyricBoundsTimer: ReturnType<typeof setTimeout> | null = null;

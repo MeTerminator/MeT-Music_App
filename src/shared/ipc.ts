@@ -33,7 +33,7 @@ export const LyricConfigSchema = z.object({
   textColor: z.string().default("#ffffff"),
   colorActive: z.string().default("#ffffff"),
   colorInactive: z.string().default("rgba(255, 255, 255, 0.3)"),
-  showTranslation: z.boolean().default(true),
+  showTranslation: z.boolean().default(false),
   isLock: z.boolean().default(false),
   bgColor: z.string().default("rgba(0, 0, 0, 0.2)"),
   bgBlur: z.number().default(10),

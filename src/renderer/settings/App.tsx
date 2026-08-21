@@ -93,7 +93,8 @@ export default function App(): React.JSX.Element {
 
   /* ---- 屏幕与歌词窗几何 ---- */
   const [screenSize, setScreenSize] = useState<ScreenSize>({ width: 1920, height: 1080 });
-  const [geometry, setGeometry] = useState<Geometry>({ x: 0, y: 0, w: 1200, h: 130 });
+  // 初值仅为拿到真实 bounds 前的占位,与 window-manager 的 DEFAULT_LYRIC_* 对齐
+  const [geometry, setGeometry] = useState<Geometry>({ x: 0, y: 0, w: 1200, h: 100 });
   const screenRef = useRef(screenSize);
   const geometryRef = useRef(geometry);
   screenRef.current = screenSize;
