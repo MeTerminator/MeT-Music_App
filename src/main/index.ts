@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import {
     CH,
     HookPayloadSchema,
-    LyricConfigSchema,
+    LyricConfigPatchSchema,
     LyricWindowActionSchema,
     PlayerCommandSchema,
     WindowControlSchema,
@@ -278,8 +278,10 @@ function setupIPC(): void {
     });
 
     ipcMain.on(CH.lyricConfigSet, (_event, raw: unknown) => {
-        // payload 为 Partial<LyricConfig>;partial() 校验避免 default 填充改写未提交字段
-        const parsed = LyricConfigSchema.partial().safeParse(raw);
+        // payload 为 Partial<LyricConfig>;必须用 LyricConfigPatchSchema 而非
+        // LyricConfigSchema.partial() —— 后者在 Zod 4 下仍会用默认值填满缺席字段,
+        // 把「只改一项」变成「其余全部重置」(见 shared/ipc.ts 的说明)
+        const parsed = LyricConfigPatchSchema.safeParse(raw);
         if (!parsed.success) {
             console.warn(`[ipc] ${CH.lyricConfigSet} invalid payload dropped:`, parsed.error.message);
             return;

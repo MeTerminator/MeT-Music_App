@@ -52,6 +52,32 @@ export const LyricConfigSchema = z.object({
 export type LyricConfig = z.infer<typeof LyricConfigSchema>;
 export const defaultLyricConfig = (): LyricConfig => LyricConfigSchema.parse({});
 
+/**
+ * 配置补丁 schema:只校验提交上来的字段,**不填默认值**。
+ *
+ * 不能用 LyricConfigSchema.partial():Zod 4 起 .partial() 不再阻止 .default()
+ * 生效,缺席字段照样会被默认值填满。于是「只改一项」的补丁落盘时会把其余所有
+ * 字段静默重置为默认值 —— 锁定桌面歌词后去关翻译、锁定被取消,就是这么来的
+ * (窗口位置/颜色/字体同样会被打回默认,只是不容易第一眼发现)。
+ *
+ * 故逐字段剥掉 default 再 optional,让「缺席」真正等于「不改」。
+ */
+type LyricConfigPatchShape = {
+  [K in keyof LyricConfig]: z.ZodOptional<z.ZodType<LyricConfig[K]>>;
+};
+
+// 逐字段 unwrap 掉 ZodDefault 再 optional。shape 是动态拼的,TS 推不出逐键类型,
+// 故在此处一次性断言;断言之外的调用点仍是完整类型。
+const lyricConfigPatchShape = Object.fromEntries(
+  Object.entries(LyricConfigSchema.shape).map(([key, schema]) => [
+    key,
+    schema.unwrap().optional(),
+  ]),
+) as unknown as LyricConfigPatchShape;
+
+export const LyricConfigPatchSchema = z.object(lyricConfigPatchShape);
+export type LyricConfigPatch = z.infer<typeof LyricConfigPatchSchema>;
+
 export const PlayerCommandSchema = z.object({
   action: z.enum(["prev", "next", "playOrPause"]),
 });
