@@ -49,6 +49,9 @@ export const CH = {
   evApiConfigChanged: "api:config-changed",
   /** 外部 API 运行状态变更(启停成功/失败、连接数变化) */
   evApiStatusChanged: "api:status-changed",
+
+  /** invoke:写系统剪贴板(设置窗复制接口文档用) */
+  clipboardWrite: "clipboard:write",
 } as const;
 
 export type ChannelName = (typeof CH)[keyof typeof CH];

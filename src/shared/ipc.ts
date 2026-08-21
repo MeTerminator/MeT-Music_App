@@ -211,6 +211,8 @@ export interface DesktopAPI {
   getLyricConfig(): Promise<LyricConfig>;
   getExternalApiConfig(): Promise<ExternalApiConfig>;
   getExternalApiStatus(): Promise<ExternalApiStatus>;
+  /** 写系统剪贴板;返回是否写入成功 */
+  copyText(text: string): Promise<boolean>;
   // send
   playerCommand(action: PlayerCommand["action"]): void;
   windowControl(action: WindowControl["action"]): void;

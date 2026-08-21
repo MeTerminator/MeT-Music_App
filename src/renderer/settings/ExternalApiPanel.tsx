@@ -7,6 +7,7 @@ import {
   type ExternalApiStatus,
 } from "@shared/ipc";
 import { NumberInput, Switch } from "./components";
+import { buildApiDocMarkdown, CONVENTIONS, ENDPOINTS, WS_DOWN, WS_EVENTS, WS_OPS } from "./api-doc";
 
 /**
  * 外部 API 设置面板(HTTP + WebSocket)。
@@ -14,6 +15,8 @@ import { NumberInput, Switch } from "./components";
  * 能力与 SPlayer-Next 的「外部 API」对齐(api.html / socket.html):
  * 默认关闭、默认只绑本机、无鉴权;WebSocket 与 HTTP 同端口,挂在 /ws,
  * 且必须先开外部 API 才生效。
+ *
+ * 页内文档与「复制文档 Markdown」按钮共用 ./api-doc 的数据,改端点只需改那一处。
  *
  * 与歌词配置不同,这里**不做防抖**:每一项都会触发 main 侧起/停/换端口重启服务,
  * 攒批提交反而让「改端口」中间态起一次没人要的服务。端口输入本身是 onCommit
@@ -29,35 +32,15 @@ const DEFAULT_STATUS: ExternalApiStatus = {
   error: null,
 };
 
-/** 端点速查(与 main/external-api.ts 的路由一一对应) */
-const ENDPOINTS: ReadonlyArray<{ method: string; path: string; desc: string }> = [
-  { method: "GET", path: "/api/info", desc: "应用与连接信息" },
-  { method: "GET", path: "/api/status", desc: "播放状态" },
-  { method: "GET", path: "/api/volume", desc: "当前音量" },
-  { method: "GET", path: "/api/now-playing", desc: "轻量播放快照" },
-  { method: "GET", path: "/api/lyrics", desc: "当前曲目完整歌词" },
-  { method: "POST", path: "/api/play", desc: "播放" },
-  { method: "POST", path: "/api/pause", desc: "暂停" },
-  { method: "POST", path: "/api/stop", desc: "停止" },
-  { method: "POST", path: "/api/next", desc: "下一曲" },
-  { method: "POST", path: "/api/prev", desc: "上一曲" },
-  { method: "POST", path: "/api/seek", desc: "跳转({ positionMs })" },
-  { method: "POST", path: "/api/volume", desc: "设置音量({ volume })" },
-];
-
-/** WebSocket 命令速查(客户端 → 服务器的 op) */
-const WS_OPS: ReadonlyArray<{ op: string; desc: string }> = [
-  { op: "play / pause / stop", desc: "播放 / 暂停 / 停止" },
-  { op: "next / prev", desc: "下一曲 / 上一曲" },
-  { op: "seek", desc: "跳转,附 positionMs(毫秒)" },
-  { op: "setVolume", desc: "音量,附 volume(0 ~ 1)" },
-];
-
 export default function ExternalApiPanel(): React.JSX.Element {
   const [config, setConfig] = useState<ExternalApiConfig>(defaultExternalApiConfig);
   const [status, setStatus] = useState<ExternalApiStatus>(DEFAULT_STATUS);
   const [loaded, setLoaded] = useState(false);
   const loadedRef = useRef(false);
+
+  /** 「复制文档 Markdown」的反馈:idle → copied / failed,2 秒回落 */
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copyTimerRef = useRef<number | null>(null);
 
   const patchConfig = useCallback((patch: ExternalApiConfigPatch) => {
     if (!loadedRef.current) return;
@@ -101,6 +84,12 @@ export default function ExternalApiPanel(): React.JSX.Element {
     });
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   const displayHost = status.lanAddress ?? "127.0.0.1";
   const httpBase = `http://${displayHost}:${config.port}/api`;
   const wsBase = `ws://${displayHost}:${config.port}/ws`;
@@ -111,6 +100,31 @@ export default function ExternalApiPanel(): React.JSX.Element {
       ? `运行中 · 监听 ${status.host}:${status.port}`
       : "未运行";
   const statusTone = status.error ? "error" : status.running ? "ok" : "idle";
+
+  /**
+   * 复制接口文档。剪贴板走主进程的 clipboard 模块 —— 设置窗的 session 只放行
+   * local-fonts 权限,渲染端的 navigator.clipboard 会被 permission handler 挡下。
+   * 文档里的地址用当前实际的 host/端口,复制出去可以直接照着请求。
+   */
+  const copyDoc = useCallback(async () => {
+    const markdown = buildApiDocMarkdown({
+      host: displayHost,
+      port: config.port,
+      wsEnabled: config.wsEnabled,
+    });
+    let ok = false;
+    try {
+      ok = await window.desktopAPI.copyText(markdown);
+    } catch (error) {
+      console.error("Failed to copy API doc:", error);
+    }
+    setCopyState(ok ? "copied" : "failed");
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => {
+      copyTimerRef.current = null;
+      setCopyState("idle");
+    }, 2000);
+  }, [config.port, config.wsEnabled, displayHost]);
 
   return (
     <div style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}>
@@ -190,30 +204,110 @@ export default function ExternalApiPanel(): React.JSX.Element {
       </section>
 
       <section className="settings-section">
-        <h3>端点速查</h3>
+        <div className="api-doc-header">
+          <h3>接口文档</h3>
+          <button
+            type="button"
+            className={`btn btn-secondary btn-copy${copyState === "idle" ? "" : ` is-${copyState}`}`}
+            onClick={() => void copyDoc()}
+          >
+            {copyState === "copied"
+              ? "已复制"
+              : copyState === "failed"
+                ? "复制失败"
+                : "复制文档 Markdown"}
+          </button>
+        </div>
+
+        <div className="setting-item">
+          <label>通用约定</label>
+          <ul className="api-list">
+            <li>
+              基础路径：<code>{httpBase}</code>
+            </li>
+            {CONVENTIONS.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+
         <div className="setting-item api-table">
+          <label>HTTP 端点</label>
           {ENDPOINTS.map((item) => (
             <div className="api-row" key={`${item.method} ${item.path}`}>
               <span className={`api-method api-method-${item.method.toLowerCase()}`}>
                 {item.method}
               </span>
               <code className="api-path">{item.path}</code>
-              <span className="api-desc">{item.desc}</span>
+              <span className="api-desc" title={item.desc}>
+                {item.desc}
+              </span>
             </div>
           ))}
         </div>
+
+        <div className="setting-item">
+          <label>请求 / 响应示例</label>
+          <pre className="api-block">
+            {[
+              `GET ${httpBase}/status`,
+              "→ " + ENDPOINTS.find((item) => item.path === "/api/status")!.response,
+              "",
+              `POST ${httpBase}/seek`,
+              "← " + ENDPOINTS.find((item) => item.path === "/api/seek")!.body,
+              "→ " + '{ "ok": true }',
+            ].join("\n")}
+          </pre>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3>WebSocket 协议</h3>
+
+        <div className="setting-item">
+          <label>地址</label>
+          <code className="api-code">{config.wsEnabled ? wsBase : "（未启用）"}</code>
+        </div>
+
         <div className="setting-item api-table">
+          <label>服务器 → 客户端（kind）</label>
+          {WS_DOWN.map((item) => (
+            <div className="api-row" key={item.kind}>
+              <span className="api-method api-method-ws">{item.kind}</span>
+              <span className="api-desc" title={item.desc}>
+                {item.desc}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="setting-item api-table">
+          <label>事件类型（kind: event）</label>
+          {WS_EVENTS.map((item) => (
+            <div className="api-row" key={item.type}>
+              <code className="api-path api-path-wide">{item.type}</code>
+              <span className="api-desc" title={`${item.data} — ${item.desc}`}>
+                {item.data}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="setting-item api-table">
+          <label>客户端 → 服务器（op）</label>
           {WS_OPS.map((item) => (
             <div className="api-row" key={item.op}>
-              <span className="api-method api-method-ws">WS</span>
-              <code className="api-path">{item.op}</code>
-              <span className="api-desc">{item.desc}</span>
+              <code className="api-path api-path-wide">{item.op}</code>
+              <span className="api-desc" title={`${item.args} — ${item.desc}`}>
+                {item.desc}
+              </span>
             </div>
           ))}
         </div>
+
         <p className="api-note">
-          时间单位均为毫秒；控制类接口成功返回 {"{ ok: true }"}，参数非法返回 400。 WebSocket
-          下行消息带 kind 字段（hello / event / ack / error）。
+          完整端点详情、字段说明与 curl / JavaScript 示例都在「复制文档 Markdown」里，
+          贴到编辑器或发给别人即可照着接入。
         </p>
       </section>
     </div>

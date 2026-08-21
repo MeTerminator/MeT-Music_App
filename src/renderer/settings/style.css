@@ -721,3 +721,86 @@ input:checked + .slider:before {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ---- 接口文档 ---- */
+
+.api-doc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.api-doc-header h3 {
+    margin-bottom: 0;
+}
+
+.btn-copy {
+    padding: 7px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.btn-copy.is-copied {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #86efac;
+}
+
+.btn-copy.is-failed {
+    background: rgba(248, 113, 113, 0.18);
+    border-color: rgba(248, 113, 113, 0.35);
+    color: #fca5a5;
+}
+
+.api-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #9ca3af;
+    user-select: text;
+}
+
+.api-list code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #cbd5f5;
+}
+
+/* 示例块:横向不换行,超出自己滚,免得把整个设置窗撑宽 */
+.api-block {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: #cbd5f5;
+    user-select: text;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.api-block::-webkit-scrollbar {
+    height: 8px;
+}
+
+.api-block::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.api-block::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+/* op / event type 这类标识比路径长,给条更宽的列 */
+.api-path-wide {
+    flex-shrink: 0;
+    min-width: 118px;
+}

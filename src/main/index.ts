@@ -1,4 +1,4 @@
-import { app, ipcMain, screen } from "electron";
+import { app, clipboard, ipcMain, screen } from "electron";
 import { createRequire } from "node:module";
 import {
     CH,
@@ -310,6 +310,18 @@ function setupIPC(): void {
     ipcMain.handle(CH.apiConfigGet, () => apiConfig.getConfig());
 
     ipcMain.handle(CH.apiStatusGet, (): ExternalApiStatus => externalApi.getStatus());
+
+    // 剪贴板走主进程:设置窗的 session 只放行 local-fonts 权限(见 window-manager),
+    // 渲染端的 navigator.clipboard 会被那两个 permission handler 挡下来
+    ipcMain.handle(CH.clipboardWrite, (_event, raw: unknown): boolean => {
+        // 1MB 上限:这个通道只服务「复制接口文档」,不该被拿来搬运大块数据
+        if (typeof raw !== "string" || raw.length === 0 || raw.length > 1_000_000) {
+            console.warn(`[ipc] ${CH.clipboardWrite} invalid payload dropped`);
+            return false;
+        }
+        clipboard.writeText(raw);
+        return true;
+    });
 
     ipcMain.on(CH.apiConfigSet, (_event, raw: unknown) => {
         // 与歌词配置同理:必须用 patch schema,缺席字段等于「不改」而非「重置」

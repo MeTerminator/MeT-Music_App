@@ -32,6 +32,7 @@ const api: DesktopAPI = {
     getLyricConfig: () => ipcRenderer.invoke(CH.lyricConfigGet) as Promise<LyricConfig>,
     getExternalApiConfig: () => ipcRenderer.invoke(CH.apiConfigGet) as Promise<ExternalApiConfig>,
     getExternalApiStatus: () => ipcRenderer.invoke(CH.apiStatusGet) as Promise<ExternalApiStatus>,
+    copyText: (text: string) => ipcRenderer.invoke(CH.clipboardWrite, text) as Promise<boolean>,
 
     // send
     playerCommand: (action: PlayerCommand["action"]) =>
