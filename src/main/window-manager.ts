@@ -124,8 +124,8 @@ export function createMainWindow(): BrowserWindow {
 
     // 主窗最大化状态回推给 UI:用户双击拖拽区、走系统快捷键或窗口菜单时,
     // UI 无从感知,「最大化/还原」图标会和实际状态对不上。
-    // 函数不存在(旧 UI)时短路求值直接跳过;页面正在导航时 executeJavaScript
-    // 会 reject,吞掉即可。
+    // typeof 判空不是版本兼容,而是时序:页面刚开始导航、UI 全局还没挂上时也会触发,
+    // 那种时刻 executeJavaScript 本身也可能 reject,一并吞掉。
     const pushWindowState = (): void => {
         if (win.isDestroyed()) return;
         win.webContents
@@ -138,104 +138,24 @@ export function createMainWindow(): BrowserWindow {
     win.on("unmaximize", pushWindowState);
 
     win.webContents.on("did-finish-load", () => {
-        // 契约 v2(src/shared/hook-contract.ts):
-        //  1. 注入 $MeTMusic_Hook 回调;
-        //  2. 探测 $MeTMusic_registerHost —— v2 UI 自行渲染导航栏按钮并回调宿主;
-        //  3. 不存在则降级为 v1 的 DOM 按钮注入(照抄旧 windowManager.js)。
+        // 契约 v2(src/shared/hook-contract.ts):注入 $MeTMusic_Hook,
+        // 再经 $MeTMusic_registerHost 注册宿主回调,由 UI 自行渲染导航栏与窗口按钮。
+        // 线上 UI 已全量 v2,原先「registerHost 不存在则回落到 v1 DOM 按钮注入」
+        // 的分支已移除。
         const inject = `
-            // === 注入 MeTMusic_Hook ===
             window.$MeTMusic_Hook = (d) => window.electronAPI.sendHookData(d);
-
-            if (typeof window.$MeTMusic_registerHost === "function") {
-                // === 契约 v2:UI 自行渲染设置/隐藏按钮 ===
-                window.$MeTMusic_registerHost({
-                    onOpenSettings: () => window.electronAPI.openSettings(),
-                    onHideWindow: () => window.electronAPI.hideWindow(),
-                    // 无边框主窗的窗口按钮(契约里全是可选项,旧 UI 收到多余字段也无妨)
-                    onMinimizeWindow: () => window.electronAPI.minimizeWindow(),
-                    onToggleMaximize: () => window.electronAPI.toggleMaximize(),
-                    onCloseWindow: () => window.electronAPI.closeWindow()
-                });
-            } else {
-                // === v1 UI 降级:注入隐藏/设置按钮 ===
-                function injectWindowButtons() {
-                    const target = document.querySelector('.main-nav > .right');
-                    if (target && !target.querySelector('.electron-hide-btn')) {
-                        // Settings Button
-                        const settingsBtn = document.createElement('div');
-                        settingsBtn.className = 'electron-settings-btn';
-                        settingsBtn.innerHTML = '⚙';
-                        settingsBtn.style.cssText = \`
-                            width: 30px;
-                            height: 30px;
-                            margin-left: 10px;
-                            font-size: 18px;
-                            color: white;
-                            background: rgba(255,255,255,0.12);
-                            border-radius: 50%;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            user-select: none;
-                            -webkit-app-region: no-drag !important;
-                            pointer-events: auto !important;
-                            position: relative;
-                            transition: background-color 0.2s;
-                        \`;
-                        settingsBtn.addEventListener("mouseover", () => {
-                            settingsBtn.style.backgroundColor = "rgba(255,255,255,0.2)";
-                        });
-                        settingsBtn.addEventListener("mouseout", () => {
-                            settingsBtn.style.backgroundColor = "rgba(255,255,255,0.12)";
-                        });
-                        settingsBtn.addEventListener("click", (e) => {
-                            e.stopPropagation();
-                            window.electronAPI.openSettings();
-                        });
-
-                        // Close Button
-                        const closeBtn = document.createElement('div');
-                        closeBtn.className = 'electron-hide-btn';
-                        closeBtn.textContent = '×';
-                        closeBtn.style.cssText = \`
-                            width: 30px;
-                            height: 30px;
-                            margin-left: 10px;
-                            font-size: 18px;
-                            font-weight: bold;
-                            color: white;
-                            background: rgba(255,255,255,0.12);
-                            border-radius: 50%;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            user-select: none;
-                            -webkit-app-region: no-drag !important;
-                            pointer-events: auto !important;
-                            position: relative;
-                            transition: background-color 0.2s;
-                        \`;
-                        closeBtn.addEventListener("mouseover", () => {
-                            closeBtn.style.backgroundColor = "rgba(245,94,85,0.8)";
-                        });
-                        closeBtn.addEventListener("mouseout", () => {
-                            closeBtn.style.backgroundColor = "rgba(255,255,255,0.12)";
-                        });
-                        closeBtn.addEventListener("click", (e) => {
-                            e.stopPropagation();
-                            window.electronAPI.hideWindow();
-                        });
-
-                        target.appendChild(settingsBtn);
-                        target.appendChild(closeBtn);
-                    }
-                }
-                injectWindowButtons();
-            }
+            window.$MeTMusic_registerHost({
+                onOpenSettings: () => window.electronAPI.openSettings(),
+                onHideWindow: () => window.electronAPI.hideWindow(),
+                // 无边框主窗的窗口按钮(契约里全是可选项)
+                onMinimizeWindow: () => window.electronAPI.minimizeWindow(),
+                onToggleMaximize: () => window.electronAPI.toggleMaximize(),
+                onCloseWindow: () => window.electronAPI.closeWindow()
+            });
         `;
-        win.webContents.executeJavaScript(inject);
+        // 页面在注入完成前被导航或关闭时 executeJavaScript 会 reject,吞掉避免
+        // unhandled rejection
+        win.webContents.executeJavaScript(inject).catch(() => undefined);
         // 注册完立刻对齐一次,免得 UI 的「最大化/还原」图标一上来就是错的
         pushWindowState();
     });

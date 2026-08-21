@@ -118,7 +118,7 @@ export interface AppInfo {
 
 /* ========== preload 暴露的 API 形状 ========== */
 
-/** 主窗 preload(远程 UI 使用;命名保持 v1 兼容,旧 UI 的注入代码依赖这些名字) */
+/** 主窗 preload(远程 UI 使用) */
 export interface MainWindowAPI {
   sendHookData(data: HookPayload): void;
   hideWindow(): void;
@@ -151,7 +151,7 @@ export interface DesktopAPI {
 
 declare global {
   interface Window {
-    /** 主窗(远程 UI)宿主 API,名称 v1 兼容 */
+    /** 主窗(远程 UI)宿主 API */
     electronAPI: MainWindowAPI;
     /** 歌词窗/设置窗 API */
     desktopAPI: DesktopAPI;
