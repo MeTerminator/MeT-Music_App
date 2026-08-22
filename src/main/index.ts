@@ -398,9 +398,23 @@ async function queryUI<T>(name: string): Promise<T | null> {
 /* ---- WebSocket 事件广播(hook tick 驱动;无连接时 broadcastEvent 直接返回) ---- */
 
 const PROGRESS_EVENT_INTERVAL_MS = 1000;
+/** 状态兜底轮询的间隔(只在有 WebSocket 客户端时才真的去问 UI) */
+const STATE_POLL_INTERVAL_MS = 1000;
 let lastEventSongKey = "";
-let lastEventPlaying: boolean | null = null;
+/** 最近一次广播出去的播放状态("playing" / "paused" / "stopped"),null 表示还没播过 */
+let lastEventState: string | null = null;
 let lastProgressEventTime = 0;
+let statePollTimer: ReturnType<typeof setInterval> | null = null;
+
+function broadcastState(state: string, positionMs: number, durationMs: number): void {
+    if (state === lastEventState) return;
+    lastEventState = state;
+    externalApi.broadcastEvent("state", {
+        state,
+        position: Math.round(positionMs),
+        duration: Math.round(durationMs)
+    });
+}
 
 function broadcastPlaybackEvents(song: HookPayload): void {
     const songKey = String(song.songMid);
@@ -415,14 +429,11 @@ function broadcastPlaybackEvents(song: HookPayload): void {
         });
     }
 
-    if (song.isPlaying !== lastEventPlaying) {
-        lastEventPlaying = song.isPlaying;
-        externalApi.broadcastEvent("state", {
-            state: song.isPlaying ? "playing" : "paused",
-            position: Math.round((song.currentTime || 0) * 1000),
-            duration: Math.round((song.duration || 0) * 1000)
-        });
-    }
+    broadcastState(
+        song.isPlaying ? "playing" : "paused",
+        (song.currentTime || 0) * 1000,
+        (song.duration || 0) * 1000
+    );
 
     // hook 每 ~17ms 一次,进度事件按秒节流,避免把连接刷爆
     const now = Date.now();
@@ -434,6 +445,31 @@ function broadcastPlaybackEvents(song: HookPayload): void {
             lyricText: song.lyricText
         });
     }
+}
+
+/**
+ * 状态兜底轮询。
+ *
+ * 上面那套事件全靠 UI 的播放 tick 驱动,而 tick 在暂停时就停了(引擎 pause
+ * 路径会 cleanAllInterval),于是「已暂停」这条状态永远发不出去,外部客户端
+ * 会一直以为还在播。这里有 WebSocket 客户端连着时按秒现取一次播放状态
+ * (和 GET /api/status 同一个数据源,它不依赖 tick),状态变了就补一条 state 事件。
+ *
+ * 与 hook 那条路共用 lastEventState 去重,谁先发现算谁的,不会发重。
+ * UI 侧修好之后这里仍然值得留着:UI 是从远端加载的,老版本靠它兜底。
+ */
+function startStatePolling(): void {
+    if (statePollTimer) return;
+    statePollTimer = setInterval(() => {
+        // 没人听就别去打扰 UI(每次取数都要过一趟 executeJavaScript)。
+        // 去重状态刻意不清空:新连上的客户端由 external-api 的开场快照单独伺候,
+        // 清了反而会在下一次轮询里给所有人重发一条根本没变化的 state。
+        if (externalApi.getStatus().wsClients === 0) return;
+        void queryUI<PlaybackSnapshot>("$MeTMusic_getState").then((snapshot) => {
+            if (!snapshot) return;
+            broadcastState(snapshot.state, snapshot.position, snapshot.duration);
+        });
+    }, STATE_POLL_INTERVAL_MS);
 }
 
 function playPrev(): void {
@@ -467,6 +503,10 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
     windowManager.setQuitting(true);
+    if (statePollTimer) {
+        clearInterval(statePollTimer);
+        statePollTimer = null;
+    }
     externalApi.stop();
     mediaManager.destroy();
     trayManager.destroyTray();
@@ -509,6 +549,7 @@ app.whenReady().then(() => {
         appInfo: () => ({ name: app.getName(), version: app.getVersion() })
     });
     externalApi.applyConfig(apiConfig.getConfig());
+    startStatePolling();
 
     updater.initUpdater();
 });

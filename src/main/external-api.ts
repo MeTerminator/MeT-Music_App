@@ -319,11 +319,47 @@ function handleWsMessage(socket: WebSocket, raw: string): void {
     sendWs(socket, { kind: "ack", op });
 }
 
+/**
+ * 新连接的开场快照(hello 之后紧跟着发,只发给这一个 socket)。
+ *
+ * 广播事件一律「变了才发」,而变化的驱动源是 UI 的播放 tick —— 暂停时 tick 是停的。
+ * 于是在暂停态连上来的客户端,在用户恢复播放或切歌之前收不到任何 track/state,
+ * 只能自己去打一次 HTTP 才知道现在放的是什么。这里补一份现取的快照
+ * (与 GET /api/now-playing 同源,不依赖 tick),事件形状与广播完全一致,
+ * 客户端一套 handler 就能吃下,不必为「连接时」单独写一条分支。
+ *
+ * UI 太旧或主窗不在时拿不到快照,静默跳过 —— 连接本身不受影响。
+ */
+async function sendHelloSnapshot(socket: WebSocket): Promise<void> {
+    const api = deps;
+    if (!api) return;
+    const now = await api.getNowPlaying();
+    // 取数是异步的,期间客户端可能已经断开;sendWs 自己判 readyState,这里不必再判
+    if (!now) return;
+    sendWs(socket, {
+        kind: "event",
+        type: "track" satisfies ExternalApiEventType,
+        data: {
+            id: now.id,
+            name: now.name,
+            artist: now.artist,
+            cover: now.cover,
+            duration: now.duration
+        }
+    });
+    sendWs(socket, {
+        kind: "event",
+        type: "state" satisfies ExternalApiEventType,
+        data: { state: now.state, position: now.position, duration: now.duration }
+    });
+}
+
 function createWsServer(server: http.Server): WebSocketServer {
     const wss = new WebSocketServer({ server, path: "/ws" });
 
     wss.on("connection", (socket) => {
         sendWs(socket, { kind: "hello", clients: wss.clients.size });
+        void sendHelloSnapshot(socket);
         emitStatus();
 
         socket.on("message", (data) => {

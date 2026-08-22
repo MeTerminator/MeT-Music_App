@@ -95,7 +95,7 @@ export const WS_DOWN: readonly { kind: string; shape: string; desc: string }[] =
   {
     kind: "hello",
     shape: '{ "kind": "hello", "clients": 1 }',
-    desc: "连接建立时发送，附当前连接数",
+    desc: "连接建立时发送，附当前连接数；随后补发一次 track + state 快照",
   },
   {
     kind: "event",
@@ -110,17 +110,18 @@ export const WS_DOWN: readonly { kind: string; shape: string; desc: string }[] =
   },
 ];
 
-/** event 消息的 type 与 data(对应 main/index.ts 的 broadcastPlaybackEvents) */
+/** event 消息的 type 与 data(对应 main/index.ts 的 broadcastPlaybackEvents
+ *  与 main/external-api.ts 的 sendHelloSnapshot) */
 export const WS_EVENTS: readonly { type: string; data: string; desc: string }[] = [
   {
     type: "track",
     data: '{ "id", "name", "artist", "cover", "duration" }',
-    desc: "切歌时推送一次（duration 为毫秒）",
+    desc: "切歌时推送一次；连接建立后也补发一次当前曲目（duration 为毫秒）",
   },
   {
     type: "state",
     data: '{ "state", "position", "duration" }',
-    desc: "播放 / 暂停状态变化时推送",
+    desc: "播放 / 暂停状态变化时推送；连接建立后也补发一次当前状态",
   },
   {
     type: "progress",
