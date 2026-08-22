@@ -50,6 +50,14 @@ export const CH = {
   /** 外部 API 运行状态变更(启停成功/失败、连接数变化) */
   evApiStatusChanged: "api:status-changed",
 
+  /* ---- 应用级设置(托盘进度、关闭按钮行为)---- */
+  /** invoke:应用级设置 */
+  appConfigGet: "app:config-get",
+  /** send:保存应用级设置并广播 */
+  appConfigSet: "app:config-set",
+  /** 应用级设置变更广播(设置窗改的、或关闭确认框「记住选择」写回的) */
+  evAppConfigChanged: "app:config-changed",
+
   /** invoke:写系统剪贴板(设置窗复制接口文档用) */
   clipboardWrite: "clipboard:write",
 } as const;

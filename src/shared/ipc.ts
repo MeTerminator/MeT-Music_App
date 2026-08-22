@@ -111,6 +111,40 @@ const externalApiConfigPatchShape = Object.fromEntries(
 export const ExternalApiConfigPatchSchema = z.object(externalApiConfigPatchShape);
 export type ExternalApiConfigPatch = z.infer<typeof ExternalApiConfigPatchSchema>;
 
+/* ========== 应用级设置(托盘、主窗关闭行为) ========== */
+
+/**
+ * 应用级设置(持久化于 userData/app-config.json)。
+ *
+ * 又是一个独立文件:歌词那份是外观、外部 API 那份是服务,这份是壳本身的行为。
+ * 三者分开存,「重置歌词配置」不会顺手把托盘和关闭行为也打回默认。
+ */
+export const AppConfigSchema = z.object({
+  /** 托盘图标叠一条播放进度条,悬浮提示里同时给出已播放/总时长 */
+  trayProgress: z.boolean().default(false),
+  /** 主窗关闭按钮的行为:隐藏到托盘(后台继续放)/ 直接退出应用 */
+  closeAction: z.enum(["minimize", "quit"]).default("minimize"),
+  /** 点关闭时先弹一次确认框(框内可当场选最小化还是退出,并可勾选记住) */
+  closeConfirm: z.boolean().default(false),
+});
+export type AppConfig = z.infer<typeof AppConfigSchema>;
+export const defaultAppConfig = (): AppConfig => AppConfigSchema.parse({});
+
+/** 补丁 schema:缺席=不改(理由同 LyricConfigPatchSchema) */
+type AppConfigPatchShape = {
+  [K in keyof AppConfig]: z.ZodOptional<z.ZodType<AppConfig[K]>>;
+};
+
+const appConfigPatchShape = Object.fromEntries(
+  Object.entries(AppConfigSchema.shape).map(([key, schema]) => [
+    key,
+    schema.unwrap().optional(),
+  ]),
+) as unknown as AppConfigPatchShape;
+
+export const AppConfigPatchSchema = z.object(appConfigPatchShape);
+export type AppConfigPatch = z.infer<typeof AppConfigPatchSchema>;
+
 /** 外部 API 运行状态(设置窗展示用;由 main 在启停/连接数变化时广播) */
 export interface ExternalApiStatus {
   running: boolean;
@@ -211,6 +245,7 @@ export interface DesktopAPI {
   getLyricConfig(): Promise<LyricConfig>;
   getExternalApiConfig(): Promise<ExternalApiConfig>;
   getExternalApiStatus(): Promise<ExternalApiStatus>;
+  getAppConfig(): Promise<AppConfig>;
   /** 写系统剪贴板;返回是否写入成功 */
   copyText(text: string): Promise<boolean>;
   // send
@@ -219,6 +254,7 @@ export interface DesktopAPI {
   lyricWindow(action: LyricWindowAction): void;
   setLyricConfig(config: Partial<LyricConfig>): void;
   setExternalApiConfig(config: ExternalApiConfigPatch): void;
+  setAppConfig(config: AppConfigPatch): void;
   // events(返回取消订阅函数)
   onLyricChange(cb: (data: LyricLineEvent) => void): () => void;
   onSongChange(cb: (label: string) => void): () => void;
@@ -228,6 +264,7 @@ export interface DesktopAPI {
   onBoundsChanged(cb: (bounds: Rect) => void): () => void;
   onExternalApiConfigChanged(cb: (config: ExternalApiConfig) => void): () => void;
   onExternalApiStatusChanged(cb: (status: ExternalApiStatus) => void): () => void;
+  onAppConfigChanged(cb: (config: AppConfig) => void): () => void;
 }
 
 declare global {

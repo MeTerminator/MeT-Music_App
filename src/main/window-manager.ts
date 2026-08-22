@@ -1,6 +1,7 @@
-import { app, BrowserWindow, screen, type BrowserWindowConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, screen, type BrowserWindowConstructorOptions } from "electron";
 import path from "node:path";
 import { CH } from "../shared/ipc";
+import * as appConfig from "./app-config";
 import * as config from "./config";
 
 let mainWindow: BrowserWindow | null = null;
@@ -83,6 +84,75 @@ export function getScreenWidth(): number {
     return display.bounds.width;
 }
 
+/** 确认框开着时不重复弹(用户可以连点关闭按钮,也可能同时走托盘/快捷键) */
+let closeDialogOpen = false;
+
+/** 真正退出:置退出标志后 app.quit(),before-quit 里的清理照常跑 */
+function quitApp(): void {
+    isQuiting = true;
+    app.quit();
+}
+
+/**
+ * 主窗关闭按钮的落点(app-config.closeAction / closeConfirm)。
+ *
+ * 主窗是 frame: false,关闭按钮由远端 UI 渲染后回调过来走 win.close(),
+ * 系统快捷键(⌘W / Alt+F4)也落在同一个 close 事件上,所以策略只写在这一处。
+ *
+ * 开了二次确认就弹一个三选框:最小化到托盘 / 退出程序 / 取消。这里刻意不是
+ * 「确定要执行你设定的动作吗」—— 那种确认框除了多按一次没有任何信息量;
+ * 让用户当场选,并给一个「记住我的选择」把结果写回 closeAction 并关掉确认,
+ * 才是这个开关真正有用的形态。
+ */
+function handleMainWindowClose(win: BrowserWindow): void {
+    const { closeAction, closeConfirm } = appConfig.getConfig();
+
+    if (!closeConfirm) {
+        if (closeAction === "quit") quitApp();
+        else win.hide();
+        return;
+    }
+
+    if (closeDialogOpen) return;
+    closeDialogOpen = true;
+
+    void dialog
+        .showMessageBox(win, {
+            type: "question",
+            title: "关闭 MeT-Music",
+            message: "要最小化到托盘,还是退出程序?",
+            detail: "最小化后音乐会继续播放,可从系统托盘图标唤回主界面。",
+            buttons: ["最小化到托盘", "退出程序", "取消"],
+            // 默认落在用户设定的行为上,回车即可
+            defaultId: closeAction === "quit" ? 1 : 0,
+            cancelId: 2,
+            checkboxLabel: "记住我的选择,不再询问",
+            checkboxChecked: false,
+            noLink: true
+        })
+        .then(({ response, checkboxChecked }) => {
+            closeDialogOpen = false;
+            if (response === 2) return;
+
+            const chosen = response === 1 ? "quit" : "minimize";
+            if (checkboxChecked) {
+                // 记住选择 = 把这次的决定写成默认行为,并关掉确认框
+                const next = appConfig.saveConfig({ closeAction: chosen, closeConfirm: false });
+                broadcastToLocalWindows(CH.evAppConfigChanged, next);
+            }
+
+            if (chosen === "quit") quitApp();
+            else win.hide();
+        })
+        .catch((err) => {
+            closeDialogOpen = false;
+            // 弹不出确认框时不能把窗口卡死在「关不掉」:退回配置里的默认行为
+            console.error("[window] close confirm dialog failed:", err);
+            if (closeAction === "quit") quitApp();
+            else win.hide();
+        });
+}
+
 export function createMainWindow(): BrowserWindow {
     if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
     const screenWidth = getScreenWidth();
@@ -111,10 +181,9 @@ export function createMainWindow(): BrowserWindow {
     win.loadURL(process.env.METMUSIC_UI_URL || "https://music.met6.top:444/app/");
 
     win.on("close", (e) => {
-        if (!isQuiting) {
-            e.preventDefault();
-            win.hide();
-        }
+        if (isQuiting) return;
+        e.preventDefault();
+        handleMainWindowClose(win);
     });
 
     win.on("closed", () => {

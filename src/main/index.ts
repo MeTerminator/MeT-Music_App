@@ -1,6 +1,7 @@
 import { app, clipboard, ipcMain, screen } from "electron";
 import { createRequire } from "node:module";
 import {
+    AppConfigPatchSchema,
     CH,
     ExternalApiConfigPatchSchema,
     HookPayloadSchema,
@@ -24,6 +25,7 @@ import {
 } from "../shared/hook-contract";
 import * as config from "./config";
 import * as apiConfig from "./api-config";
+import * as appConfig from "./app-config";
 import * as externalApi from "./external-api";
 import * as windowManager from "./window-manager";
 import * as trayManager from "./tray-manager";
@@ -124,6 +126,8 @@ function setupIPC(): void {
         const lyricWindow = windowManager.getLyricWindow();
 
         trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
+        // 托盘进度是每帧喂、由 tray-manager 自行按「像素/秒」去重,这里不另做节流
+        trayManager.updateTrayProgress(currentSong);
         mediaManager.update(currentSong);
 
         if (lyricWindow && !lyricWindow.isDestroyed()) {
@@ -308,6 +312,21 @@ function setupIPC(): void {
     });
 
     ipcMain.handle(CH.apiConfigGet, () => apiConfig.getConfig());
+
+    ipcMain.handle(CH.appConfigGet, () => appConfig.getConfig());
+
+    ipcMain.on(CH.appConfigSet, (_event, raw: unknown) => {
+        // 与歌词/外部 API 配置同理:必须用 patch schema,缺席字段等于「不改」而非「重置」
+        const parsed = AppConfigPatchSchema.safeParse(raw);
+        if (!parsed.success) {
+            console.warn(`[ipc] ${CH.appConfigSet} invalid payload dropped:`, parsed.error.message);
+            return;
+        }
+        const next = appConfig.saveConfig(parsed.data);
+        // 关掉托盘进度要立刻还原图标,不能等下一帧 hook(暂停时根本没有下一帧)
+        trayManager.applyAppConfig(currentSong);
+        windowManager.broadcastToLocalWindows(CH.evAppConfigChanged, next);
+    });
 
     ipcMain.handle(CH.apiStatusGet, (): ExternalApiStatus => externalApi.getStatus());
 
@@ -514,6 +533,8 @@ app.on("before-quit", () => {
 
 app.whenReady().then(() => {
     config.loadConfig();
+    // 关闭按钮行为在主窗建出来之前就得可用(close 事件比任何 IPC 都早)
+    appConfig.loadConfig();
     // 歌词窗隐藏期间 flush 会保留 pending,重新可见时补发最后一次歌词行
     windowManager.setOnLyricWindowShow(() => {
         if (pendingLyricUpdate) flushLyricUpdate();

@@ -4,6 +4,7 @@ import { defaultLyricConfig, type LyricConfig } from "@shared/ipc";
 import { hexToRgba, rgbToHex } from "@renderer/shared/color";
 import { FontSelect, NumberInput, Switch, type FeaturedFont } from "./components";
 import ExternalApiPanel from "./ExternalApiPanel";
+import GeneralPanel from "./GeneralPanel";
 
 /* ========== 常量 ========== */
 
@@ -20,16 +21,33 @@ const MOVE_STEPS = [1, 10, 50] as const;
  * 左侧菜单分组。
  * 原先所有分区堆在一列里滚,加进外部 API 之后长得没法看;
  * 改成左菜单切换,每次只渲染当前组(切组即回到顶部,不必记滚动位置)。
+ *
+ * 菜单项再按归属分组带标题:前五项全是桌面歌词窗的外观/行为,
+ * 外部 API 是整个客户端的能力,混在一列里看不出层级。
  */
-const PANES = [
-  { id: "font", label: "字体", icon: "Aa" },
-  { id: "color", label: "颜色与描边", icon: "◐" },
-  { id: "background", label: "背景与特效", icon: "▨" },
-  { id: "layout", label: "窗口与位置", icon: "⊹" },
-  { id: "misc", label: "其他选项", icon: "⋯" },
-  { id: "api", label: "外部 API", icon: "⇄" },
+const NAV_GROUPS = [
+  {
+    title: "桌面歌词",
+    items: [
+      { id: "font", label: "字体", icon: "Aa" },
+      { id: "color", label: "颜色与描边", icon: "◐" },
+      { id: "background", label: "背景与特效", icon: "▨" },
+      { id: "layout", label: "窗口与位置", icon: "⊹" },
+      { id: "misc", label: "其他选项", icon: "⋯" },
+    ],
+  },
+  {
+    title: "应用",
+    items: [
+      { id: "general", label: "常规", icon: "⚙" },
+      { id: "api", label: "外部 API", icon: "⇄" },
+    ],
+  },
 ] as const;
-type PaneId = (typeof PANES)[number]["id"];
+type PaneId = (typeof NAV_GROUPS)[number]["items"][number]["id"];
+
+/** 归「桌面歌词」组的面板 id(内容区那层加载封锁按此判定,新增应用级面板不会误入) */
+const LYRIC_PANE_IDS: readonly PaneId[] = NAV_GROUPS[0].items.map((item) => item.id);
 
 /* ========== 工具函数 ========== */
 
@@ -421,27 +439,32 @@ export default function App(): React.JSX.Element {
       {/* 左侧菜单 + 内容区 */}
       <div className="settings-body">
         <nav className="settings-nav">
-          {PANES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-item${activePane === item.id ? " active" : ""}`}
-              onClick={() => setActivePane(item.id)}
-            >
-              <span className="nav-icon" aria-hidden>
-                {item.icon}
-              </span>
-              <span className="nav-label">{item.label}</span>
-            </button>
+          {NAV_GROUPS.map((group) => (
+            <div className="nav-group" key={group.title}>
+              <div className="nav-group-title">{group.title}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`nav-item${activePane === item.id ? " active" : ""}`}
+                  onClick={() => setActivePane(item.id)}
+                >
+                  <span className="nav-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="nav-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
         <main className="settings-content">
           {/* 歌词相关分组:初始配置加载完成前禁交互,防止把默认值当作用户改动提交
               (外部 API 面板自带一套加载态,不受这里的封锁影响)。
-              整块随「外部 API」组隐藏 —— 否则底部那排歌词动作按钮会跑到
-              外部 API 面板上方,看着像是这一组的按钮。 */}
-          {activePane !== "api" && (
+              整块只在「桌面歌词」组的面板下渲染 —— 否则底部那排歌词动作按钮会跑到
+              应用级面板上方,看着像是那一组的按钮。 */}
+          {LYRIC_PANE_IDS.includes(activePane) && (
             <div
               aria-busy={!loaded}
               style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}
@@ -893,6 +916,7 @@ export default function App(): React.JSX.Element {
             </div>
           )}
 
+          {activePane === "general" && <GeneralPanel />}
           {activePane === "api" && <ExternalApiPanel />}
         </main>
       </div>

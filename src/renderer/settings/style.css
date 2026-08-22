@@ -88,6 +88,29 @@ body {
     overflow-y: auto;
 }
 
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nav-group + .nav-group {
+    margin-top: 16px;
+}
+
+/* 分组标题:纯标注,不可点;字重与色阶都压在菜单项之下,避免抢焦点 */
+.nav-group-title {
+    padding: 4px 10px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.32);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .nav-item {
     display: flex;
     align-items: center;
@@ -631,7 +654,8 @@ input:checked + .slider:before {
     padding-right: 12px;
 }
 
-.api-sub {
+.api-sub,
+.setting-sub {
     font-size: 11px;
     line-height: 1.5;
     color: #9ca3af;
@@ -649,7 +673,8 @@ input:checked + .slider:before {
     color: #e5e7eb;
 }
 
-.api-note {
+.api-note,
+.setting-note {
     margin-top: 8px;
     font-size: 11px;
     line-height: 1.6;
